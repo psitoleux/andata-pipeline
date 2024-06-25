@@ -1,11 +1,12 @@
-from abc import ABC
+from abmodule import Module
+from scanpy import sc
 
-class Module(ABC):
+class AmbientRemover(Module):
     def __init__(self, method : str, **kwargs):
-        
+
         pass
-    
-    @abstractmethod
+
     def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
+
         pass
+

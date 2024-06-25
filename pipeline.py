@@ -2,68 +2,7 @@ import numpy as np
 import scanpy as sc
 from abc import ABC
 
-
-
-class DoubletFinder(Module):
-    def __init__(self, method : str, **kwargs):
-        
-        pass
     
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
-    
-class AmbientRemover(Module):
-    def __init__(self, method : str, **kwargs):
-
-        pass
-    
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
-    
-    
-class FeatureSelection(Module):
-    
-    def __init__(self, method : str, **kwargs):
-        
-        pass
-    
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
-    
-
-class Normalization(Module):
-    
-    def __init__(self, method : str, **kwargs):
-        
-        pass
-    
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
-    
-class DimReduction(Module):
-    
-    def __init__(self, method : str, **kwargs):
-        
-        pass
-    
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
-    
-class BatchCorrection(Module):
-    
-    def __init__(self, method : str, **kwargs):
-        
-        pass
-    
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
-
 class Pipeline:
     
     def __init__(self, adata : sc.AnnData, config : dict):
