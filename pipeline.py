@@ -1,16 +1,8 @@
 import numpy as np 
 import scanpy as sc
+from abc import ABC
 
 
-
-class Module:
-    def __init__(self, method : str, **kwargs):
-        
-        pass
-    
-    def call(self, adata : sc.AnnData) -> sc.AnnData:
-        
-        pass
 
 class DoubletFinder(Module):
     def __init__(self, method : str, **kwargs):
