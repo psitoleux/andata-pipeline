@@ -29,7 +29,7 @@ def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotli
     # Create a figure with a 16x16 inch size
     fig, ax = plt.subplots(figsize=(16, 16))
     
-    # Extract the expression values of the genes
+    # Extract the expression values of the genes as numpy arrays
     exp1, exp2 = adata.X[:, gidx1].A1, adata.X[:, gidx2].A1
     
     # Plot the scatter plot of the expression values
