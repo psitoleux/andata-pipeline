@@ -18,61 +18,73 @@ config = {
     
 class Pipeline(Module):
     
-    def __init__(self, adata : sc.AnnData, config : dict):
-        
+    def __init__(self, adata: sc.AnnData, config: dict):
         self.raw = adata
         self.adata = adata
-
         self.config = config
+        self.outlier_keys = config.get("outlier_keys")
         
-        self.outlier_keys = config["outlier_keys"]
-         
-        if config["ambient"] is None:
-            self.ambient = None
-        elif config["ambient"] == "":
-            
+        self.ambient = None if config.get("ambient") is None else ""
         
-        if config["doublets"] is None:
-            self.doublets = None
-        elif config["doublets"] == "scdbl":
+        self.doublets = self._get_doublets_method(config.get("doublets"))
+        self.normalization = self._get_normalization_method(config.get("normalization"))
+        self.feature_selection = self._get_feature_selection_method(config.get("feature_selection"))
+        self.dim_reduction = self._get_dim_reduction_method(config.get("dim_reduction"), config)
+        self.batch_corr = self._get_batch_corr_method(config.get("batch_corr"), config)
+    
+    def _get_doublets_method(self, doublets_config):
+        if doublets_config is None:
+            return None
+        elif doublets_config == "scdbl":
             from modules.doublet import scdbl
-            self.doublets = scdbl
-        
-        if config["normalization"] is None:
-            self.normalization = None
-        elif config['dim_reduction'] == "glmpca":
-            self.normalization = None
-        elif config["normalization"] == "log1p": 
-            from modules.norm import log1p
-            self.normalization = log1p
-        elif config["normalization"] == "pearson_residuals":
-            self.normalization = sc.experimental.pp.normalize_pearson_residuals
+            return scdbl
         else:
-            self.normalization = None
-        
-        if config["feature_selection"] is None:
-            self.feature_selection = None
-        elif config["feature_selection"] == "hvg":
-            self.feature_selection = sc.pp.highly_variable_genes
-        elif config["feature_selection"] == "deviance":
+            return None
+
+    def _get_normalization_method(self, normalization_config):
+        if normalization_config is None:
+            return None
+        elif normalization_config == "log1p":
+            from modules.norm import log1p
+            return log1p
+        elif normalization_config == "pearson_residuals":
+            return sc.experimental.pp.normalize_pearson_residuals
+        elif normalization_config == "sanity":
+            from modules.norm import sanity_normalization
+            return sanity_normalization
+        else:
+            return None
+    
+    def _get_feature_selection_method(self, feature_selection_config):
+        if feature_selection_config is None:
+            return None
+        elif feature_selection_config == "hvg":
+            return sc.pp.highly_variable_genes
+        elif feature_selection_config == "deviance":
             from modules.featsel import deviance
-            self.feature_selection = deviance
-        
-        if config["dim_reduction"] is None:
-            self.dim_reduction = None
-        elif config["dim_reduction"] == "pca":
-            self.dim_reduction = lambda adata : sc.pp.pca(adata, n_comps = config["pca_n_comps"])
-        elif config["dim_reduction"] == "glmpca":
+            return deviance
+        else:
+            return None
+
+    def _get_dim_reduction_method(self, dim_reduction_config, config):
+        if dim_reduction_config is None:
+            return None
+        elif dim_reduction_config == "pca":
+            return lambda adata: sc.pp.pca(adata, n_comps=config.get("pca_n_comps", 50))
+        elif dim_reduction_config == "glmpca":
             from modules.glmpca import glmpca
-            self.dim_reduction = lambda adata : glmpca(adata, n_comps = config["pca_n_comps"])
-        
-        
-        if config["batch_corr"] is None:
-            self.batch_corr = None
-        elif config["batch_corr"] == "bbknn":
+            return lambda adata: glmpca(adata, n_comps=config.get("pca_n_comps", 50))
+        else:
+            return None
+    
+    def _get_batch_corr_method(self, batch_corr_config, config):
+        if batch_corr_config is None:
+            return None
+        elif batch_corr_config == "bbknn":
             from modules.batchcorr import bbknn
-            self.batch_corr = lambda adata : bbknn(adata, batch_key = config["batch_key"])
-            
+            return lambda adata: bbknn(adata, batch_key=config.get("batch_key"))
+        else:
+            return None
         
         
     def tag(self, tags : dict) -> None:
