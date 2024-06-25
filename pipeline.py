@@ -1,9 +1,9 @@
 import numpy as np 
 import scanpy as sc
 from abc import ABC
-
+from modules.abmodule import Module
     
-class Pipeline:
+class Pipeline(Module):
     
     def __init__(self, adata : sc.AnnData, config : dict):
         
@@ -41,20 +41,12 @@ class Pipeline:
             else: 
                 self.adata.var[k] = adata.var_names.str.contains(v[0])
             
+            
+        # note for mitochondrial ribo and hb we have tags = {"mt" : ("MT-", 0), "ribo" : ("RPS|RPL", 0), "hb" : ("^HB[^(P)]", 1)}
     def delraw(self) -> None:
         del self.adata.raw
          
-    """
-            
-        # mitochondrial genes
-adata.var["mt"] = adata.var_names.str.startswith("MT-")
-# ribosomal genes
-adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
-# hemoglobin genes.
-adata.var["hb"] = adata.var_names.str.contains(("^HB[^(P)]"))
-        
-    """
-    def run(self):
+    def call(self):
         
         pass
     
