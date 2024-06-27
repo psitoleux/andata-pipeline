@@ -18,19 +18,39 @@ config = {
     
 class Pipeline(Module):
     
-    def __init__(self, adata: sc.AnnData, config: dict):
+    def __init__(self, config: dict):
+        
+        self.input = config.get("input")
+        self.output = config.get("output")
+        
+        adata = sc.read(self.input)
+        adata.var_names_make_unique()
+        
         self.raw = adata
         self.adata = adata
         self.config = config
         self.outlier_keys = config.get("outlier_keys")
         
-        self.ambient = None if config.get("ambient") is None else ""
-        
+        self.ambient = self._get_ambient_method(config.get("ambient"))
         self.doublets = self._get_doublets_method(config.get("doublets"))
         self.normalization = self._get_normalization_method(config.get("normalization"))
         self.feature_selection = self._get_feature_selection_method(config.get("feature_selection"))
         self.dim_reduction = self._get_dim_reduction_method(config.get("dim_reduction"), config)
         self.batch_corr = self._get_batch_corr_method(config.get("batch_corr"), config)
+        self.visualization = self._get_visualization_method(config.get("visualization"))
+       
+        # TODO correct ordering of steps ?  
+        self.steps = [self.ambient, self.doublets, self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]
+    
+    
+    def _get_ambient_method(self, ambient_config):
+        if ambient_config is None:
+            return None
+        elif ambient_config == "soupx":
+            from modules.ambient import soupx
+            return soupx
+        else:
+            return None
     
     def _get_doublets_method(self, doublets_config):
         if doublets_config is None:
@@ -86,6 +106,15 @@ class Pipeline(Module):
         else:
             return None
         
+    def _get_visualization_method(self, visualization_config):
+        if visualization_config is None:
+            return None
+        elif visualization_config == "umap":
+            return sc.tl.umap
+        # TODO PacMap 
+        else:
+            return None
+        
         
     def tag(self, tags : dict) -> None:
         """
@@ -97,6 +126,10 @@ class Pipeline(Module):
         
         Returns:
             None
+            
+        Example:
+            tags = {"mt" : ("MT-", 0), "ribo" : (("RPS","RPL"), 0), "hb" : ("^HB[^(P)]", 1)} 
+
         """
         for k, v in tags.items():
             if v[1] == 0:
@@ -105,7 +138,6 @@ class Pipeline(Module):
                 self.adata.var[k] = adata.var_names.str.contains(v[0])
             
             
-        # note for mitochondrial ribo and hb we have tags = {"mt" : ("MT-", 0), "ribo" : ("RPS|RPL", 0), "hb" : ("^HB[^(P)]", 1)}
     def delraw(self) -> None:
         del self.adata.raw
          
