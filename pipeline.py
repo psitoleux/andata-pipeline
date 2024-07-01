@@ -178,4 +178,6 @@ class Pipeline():
         
         return None
     
-    def  
+    def analysis(self) -> None:
+        
+        return None
