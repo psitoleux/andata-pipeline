@@ -157,9 +157,9 @@ class Pipeline():
         """
         for k, v in tags.items():
             if v[1] == 0:
-                self.adata.var[k] = adata.var_names.str.startswith(v[0])
+                self.adata.var[k] = self.adata.var_names.str.startswith(v[0])
             else: 
-                self.adata.var[k] = adata.var_names.str.contains(v[0])
+                self.adata.var[k] = self.adata.var_names.str.contains(v[0])
             
             
     def delraw(self) -> None:
