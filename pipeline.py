@@ -218,7 +218,9 @@ class Pipeline():
     
     def visualize(self, color_key = 'method') -> None:
         
-        sc.pl.pca(self.adata, color = color_key) # plot 2D pca 
+        out = sc.pl.pca(self.adata, color = color_key) # plot 2D pca 
+        
+        print(out)
         
         self.visualization(self.adata) # create umap-like plots
         sc.pl.umap(self.adata, color = color_key, )
