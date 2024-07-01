@@ -55,12 +55,16 @@ def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotli
 def pca_3d(adata: sc.AnnData, color_key : str = 'method') -> go.Figure:
         
     x,y,z = adata.obsm['X_pca'][:,0], adata.obsm['X_pca'][:,1], adata.obsm['X_pca'][:,2]
-    labels = ['PC' + str(i) + adata.uns['pca']['variance_ratio'][i] for i in range(1, 4)]
+    variance_ratio = adata.uns['pca']['variance_ratio']
+     
+    labels = ['PC' + str(i) + "{:10.4f}".format(variance_ratio[i]) for i in range(1, 4)]
+    
     fig = px.scatter_3d(x=x, y=y, z=z,
               color=adata.obs[color_key].update_layout(
     xaxis_title=labels[0] , yaxis_title=labels[1], zaxis_title=labels[2]))
     
     fig.update_traces(marker_size = 1)
     fig.show()
+    
     
     return fig 

@@ -1,4 +1,4 @@
-
+from abmodule import Module
 import scanpy as sc
 
 
@@ -37,6 +37,7 @@ def scdbl(adata: sc.AnnData, seed : int = 123) -> sc.AnnData:
     adata.obs["scDblFinder_score"] = doublet_score
     adata.obs["scDblFinder_class"] = doublet_class
     print(adata.obs["scDblFinder_class"].value_counts())
-
+    
+ 
     return adata
 
