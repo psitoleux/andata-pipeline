@@ -39,7 +39,10 @@ class Pipeline():
         del adata
     
     def get_new_config(self) -> None:
+        
         self.config = get_config()
+        self._update_config()
+        self._reset_adata()
         
         return None
     
@@ -84,6 +87,10 @@ class Pipeline():
 
         return None
 
+    def _reset_adata(self) -> None:
+        self.adata = self.raw.copy()
+        
+        return None
          
     def _get_ambient_method(self, ambient_config):
         if ambient_config is None:

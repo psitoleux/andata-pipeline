@@ -7,4 +7,4 @@ if __name__ == "__main__":
     config = get_config()
     pipeline = Pipeline(config)
     pipeline.preprocess()
-    pipeline.visualization()
+    pipeline.visualize()
