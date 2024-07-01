@@ -126,11 +126,11 @@ class Pipeline():
     
     def outliers(self) -> None:
         
-        sc.pp.calculate_qc_metrics(adata, qc_vars=self.outlier_keys, inplace=True, percent_top=[20], log1p=True)
+        sc.pp.calculate_qc_metrics(self.adata, qc_vars=self.outlier_keys, inplace=True, percent_top=[20], log1p=True)
         
-        self.adata.obs['outlier'] =  (is_outlier(adata, "log1p_total_counts", 5)
-    | is_outlier(adata, "log1p_n_genes_by_counts", 5)
-    | is_outlier(adata, "pct_counts_in_top_20_genes", 5))
+        self.adata.obs['outlier'] =  (is_outlier(self.adata, "log1p_total_counts", 5)
+    | is_outlier(self.adata, "log1p_n_genes_by_counts", 5)
+    | is_outlier(sefl.adata, "pct_counts_in_top_20_genes", 5))
         
         if 'mt' in self.outlier_keys:
             self.adata.obs['mt_outlier'] =  is_outlier(adata, "pct_counts_mt", 3) | (adata.obs["pct_counts_mt"] > 8)
