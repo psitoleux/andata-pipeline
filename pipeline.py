@@ -167,7 +167,7 @@ class Pipeline():
          
     def preprocess(self) -> sc.AnnData:
         
-        self.tag() 
+        self.tag({"mt" : ("MT-", 0), "ribo" : (("RPS","RPL"), 0), "hb" : ("^HB[^(P)]", 1)})
         self.outliers()
         
         for step in [self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]:
