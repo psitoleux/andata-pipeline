@@ -152,7 +152,7 @@ class Pipeline():
         if batch_corr_config is None:
             return None
         elif batch_corr_config == "bbknn":
-            from scanpy.externa.pp import bbknn 
+            from scanpy.external.pp import bbknn 
             return lambda adata: bbknn(adata, batch_key=self.config.get("batch_key"))
         elif batch_corr_config == "bbknn_reg":
             from modules.batch_corr import bbknn_reg
@@ -235,10 +235,8 @@ class Pipeline():
         sc.pl.umap(self.adata, color = color_key, )
         
         # TODO allow 3D plots with plotly
-        
-        
-        
-        
+        from plots import pca_3d
+        pca_3d(self.adata, color = color_key) 
         
         return None
     
