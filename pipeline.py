@@ -218,10 +218,20 @@ class Pipeline():
         self.tag({"mt" : ("MT-", 0), "ribo" : (("RPS","RPL"), 0), "hb" : ("^HB[^(P)]", 1)})
         self.outliers()
         
-        
-       
         print('running normalization, feature selection, dim reduction, and batch correction...')
-        for step in [self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]:
+
+        if self.normalization is not None:
+            self.normalization(self.adata)
+        
+        if self.ambient is not None:
+            self.adata = self.ambient(self.adata)
+            
+        if self.doublets is not None:
+            self.doublets = self.doublets(self.adata)
+            
+        
+        
+        for step in [ self.feature_selection, self.dim_reduction, self.batch_corr]:
             if step is not None:
                 step(self.adata)
                 
