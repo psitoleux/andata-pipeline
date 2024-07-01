@@ -35,8 +35,8 @@ class Pipeline(Module):
         self.doublets = self._get_doublets_method(config.get("doublets"))
         self.normalization = self._get_normalization_method(config.get("normalization"))
         self.feature_selection = self._get_feature_selection_method(config.get("feature_selection"))
-        self.dim_reduction = self._get_dim_reduction_method(config.get("dim_reduction"), config)
-        self.batch_corr = self._get_batch_corr_method(config.get("batch_corr"), config)
+        self.dim_reduction = self._get_dim_reduction_method(config.get("dim_reduction"))
+        self.batch_corr = self._get_batch_corr_method(config.get("batch_corr"))
         self.visualization = self._get_visualization_method(config.get("visualization"))
        
         # TODO correct ordering of steps ?  
@@ -90,14 +90,14 @@ class Pipeline(Module):
         else:
             return None
 
-    def _get_dim_reduction_method(self, dim_reduction_config, config):
+    def _get_dim_reduction_method(self, dim_reduction_config):
         if dim_reduction_config is None:
             return None
         elif dim_reduction_config == "pca":
-            return lambda adata: sc.pp.pca(adata, n_comps=config.get("pca_n_comps", 50))
+            return lambda adata: sc.pp.pca(adata, n_comps=self.config.get("pca_n_comps", 50))
         elif dim_reduction_config == "glmpca":
             from modules.glmpca import glmpca
-            return lambda adata: glmpca(adata, n_comps=config.get("pca_n_comps", 50))
+            return lambda adata: glmpca(adata, n_comps=self.config.get("pca_n_comps", 50))
         else:
             return None
     
@@ -105,7 +105,7 @@ class Pipeline(Module):
         if batch_corr_config is None:
             return None
         elif batch_corr_config == "bbknn":
-            from modules.batch_corr import bbknn
+            from scanpy.externa.pp import bbknn 
             return lambda adata: bbknn(adata, batch_key=self.config.get("batch_key"))
         elif batch_corr_config == "bbknn_reg":
             from modules.batch_corr import bbknn_reg
