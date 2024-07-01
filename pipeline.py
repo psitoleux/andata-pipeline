@@ -217,6 +217,8 @@ class Pipeline():
         
         self.tag({"mt" : ("MT-", 0), "ribo" : (("RPS","RPL"), 0), "hb" : ("^HB[^(P)]", 1)})
         self.outliers()
+        
+        
        
         print('running normalization, feature selection, dim reduction, and batch correction...')
         for step in [self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]:
