@@ -249,6 +249,7 @@ class Pipeline():
         
         # TODO allow 3D plots with plotly
         from plots import pca_3d
+        print('creating 3d interactive pca plot...')
         pca_3d(self.adata, color_key = color_key) 
         
         return None
