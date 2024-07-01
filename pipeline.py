@@ -102,7 +102,7 @@ class Pipeline():
         else:
             return None
     
-    def _get_batch_corr_method(self, config):
+    def _get_batch_corr_method(self, batch_corr_config):
         if batch_corr_config is None:
             return None
         elif batch_corr_config == "bbknn":
@@ -173,3 +173,9 @@ class Pipeline():
                 
         return self.adata
     
+    def visualize(self) -> None:
+        
+        
+        return None
+    
+    def  
