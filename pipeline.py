@@ -126,12 +126,14 @@ class Pipeline():
     
     def outliers(self) -> None:
         
+        print("Removing outliers...") 
         sc.pp.calculate_qc_metrics(self.adata, qc_vars=self.outlier_keys, inplace=True, percent_top=[20], log1p=True)
         
         self.adata.obs['outlier'] =  (is_outlier(self.adata, "log1p_total_counts", 5)
     | is_outlier(self.adata, "log1p_n_genes_by_counts", 5)
     | is_outlier(sefl.adata, "pct_counts_in_top_20_genes", 5))
         
+        print("Removing MT outliers...") 
         if 'mt' in self.outlier_keys:
             self.adata.obs['mt_outlier'] =  is_outlier(adata, "pct_counts_mt", 3) | (adata.obs["pct_counts_mt"] > 8)
             
@@ -165,6 +167,7 @@ class Pipeline():
          
     def preprocess(self) -> sc.AnnData:
         
+        self.tag() 
         self.outliers()
         
         for step in [self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]:
