@@ -227,7 +227,7 @@ class Pipeline():
             self.adata = self.ambient(self.adata)
             
         if self.doublets is not None:
-            self.doublets = self.doublets(self.adata)
+            self.adata = self.doublets(self.adata)
             
         
         
