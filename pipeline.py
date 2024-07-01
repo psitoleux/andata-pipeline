@@ -21,11 +21,11 @@ class Pipeline():
     
     def __init__(self, config: dict = None) -> None:
         
-        self.input = config.get("input", cache = True)
+        self.input = config.get("input")
         self.output = config.get("output")
         
         print("Loading data...") 
-        adata = sc.read(self.input)
+        adata = sc.read(self.input, cache = True)
         
         print('Making gene names unique...')
         adata.var_names_make_unique()
