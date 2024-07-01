@@ -26,7 +26,7 @@ class Pipeline(Module):
         adata = sc.read(self.input)
         adata.var_names_make_unique()
         
-        self.raw = adata
+        self.raw = adata.copy()
         self.adata = adata
         self.config = config
         self.outlier_keys = config.get("outlier_keys")
@@ -41,6 +41,8 @@ class Pipeline(Module):
        
         # TODO correct ordering of steps ?  
         self.steps = [self.ambient, self.doublets, self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]
+        
+        del adata
     
     
     def _get_ambient_method(self, ambient_config):
@@ -80,6 +82,8 @@ class Pipeline(Module):
             return None
         elif feature_selection_config == "hvg":
             return sc.pp.highly_variable_genes
+        elif feature_selection_config == "pearson":
+            return sc.experimental.pp.highly_variable_genes
         elif feature_selection_config == "deviance":
             from modules.featsel import deviance
             return deviance
@@ -97,12 +101,15 @@ class Pipeline(Module):
         else:
             return None
     
-    def _get_batch_corr_method(self, batch_corr_config, config):
+    def _get_batch_corr_method(self, config):
         if batch_corr_config is None:
             return None
         elif batch_corr_config == "bbknn":
-            from modules.batchcorr import bbknn
-            return lambda adata: bbknn(adata, batch_key=config.get("batch_key"))
+            from modules.batch_corr import bbknn
+            return lambda adata: bbknn(adata, batch_key=self.config.get("batch_key"))
+        elif batch_corr_config == "bbknn_reg":
+            from modules.batch_corr import bbknn_reg
+            return lambda adata: bbknn_reg(adata, batch_key=self.config.get("batch_key"))
         else:
             return None
         
@@ -114,6 +121,20 @@ class Pipeline(Module):
         # TODO PacMap 
         else:
             return None
+        
+    
+    def outliers(self) -> None:
+        
+        sc.pp.calculate_qc_metrics(adata, qc_vars=self.outlier_keys, inplace=True, percent_top=[20], log1p=True)
+        
+        self.adata.obs['outlier'] =  (is_outlier(adata, "log1p_total_counts", 5)
+    | is_outlier(adata, "log1p_n_genes_by_counts", 5)
+    | is_outlier(adata, "pct_counts_in_top_20_genes", 5))
+        
+        if 'mt' in self.outlier_keys:
+            self.adata.obs['mt_outlier'] =  is_outlier(adata, "pct_counts_mt", 3) | (adata.obs["pct_counts_mt"] > 8)
+            
+        self.adata = self.adata[(~self.adata.obs.outlier) & (~self.adata.obs.mt_outlier)].copy()
         
         
     def tag(self, tags : dict) -> None:
@@ -141,13 +162,13 @@ class Pipeline(Module):
     def delraw(self) -> None:
         del self.adata.raw
          
-    def call(self):
+    def preprocess(self) -> sc.AnnData:
+        
+        self.outliers()
         
         for step in [self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]:
             if step is not None:
                 self.adata = step(self.adata)
                 
         return self.adata
-    
-    
     
