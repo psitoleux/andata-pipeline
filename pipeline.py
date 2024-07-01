@@ -24,6 +24,7 @@ class Pipeline():
         
         self.input = config.get("input")
         self.output = config.get("output")
+        self.figures_dir = './figures/'
         
         print("Loading data...") 
         adata = sc.read(self.input, cache = True)
@@ -164,7 +165,7 @@ class Pipeline():
         if visualization_config is None:
             return None
         elif visualization_config == "umap":
-            return sc.tl.umap
+            return lambda adata, n_comp=2: sc.tl.umap(adata, n_components=n_comp)
         # TODO PacMap 
         else:
             return None
@@ -230,7 +231,7 @@ class Pipeline():
         fig_pca = sc.pl.pca(self.adata, color = color_key, annotate_var_explained = True, return_fig = True) # plot 2D pca 
         
         
-        
+        print('creating 2d embedding plot...')
         self.visualization(adata=self.adata) # create umap-like plots
         sc.pl.umap(self.adata, color = color_key, )
         
