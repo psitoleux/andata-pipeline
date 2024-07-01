@@ -1,5 +1,6 @@
 import numpy as np 
 import scanpy as sc
+from parser import get_config
 
 from utils import is_outlier
 
@@ -18,9 +19,9 @@ config = {
     
 class Pipeline():
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict = None) -> None:
         
-        self.input = config.get("input")
+        self.input = config.get("input", cache = True)
         self.output = config.get("output")
         
         print("Loading data...") 
@@ -31,23 +32,58 @@ class Pipeline():
         
         self.raw = adata.copy()
         self.adata = adata
-        self.config = config
-        self.outlier_keys = config.get("outlier_keys")
-        
-        self.ambient = self._get_ambient_method(config.get("ambient"))
-        self.doublets = self._get_doublets_method(config.get("doublets"))
-        self.normalization = self._get_normalization_method(config.get("normalization"))
-        self.feature_selection = self._get_feature_selection_method(config.get("feature_selection"))
-        self.dim_reduction = self._get_dim_reduction_method(config.get("dim_reduction"))
-        self.batch_corr = self._get_batch_corr_method(config.get("batch_corr"))
-        self.visualization = self._get_visualization_method(config.get("visualization"))
-       
-        # TODO correct ordering of steps ?  
-        self.steps = [self.ambient, self.doublets, self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]
+        self.config = get_config() if config is None else config
+        self._update_config()        
         
         del adata
     
+    def get_new_config(self) -> None:
+        self.config = get_config()
+        
+        return None
     
+    def _update_config(self) -> None:
+        """
+        Update the configuration parameters of the pipeline.
+
+        This function updates the configuration parameters of the pipeline
+        based on the values specified in the self.config dictionary.
+
+        Returns:
+            None
+        """
+
+        # Update outlier keys
+        self.outlier_keys = self.config.get("outlier_keys")
+
+        # Update ambient method
+        self.ambient = self._get_ambient_method(self.config.get("ambient"))
+
+        # Update doublets method
+        self.doublets = self._get_doublets_method(self.config.get("doublets"))
+
+        # Update normalization method
+        self.normalization = self._get_normalization_method(self.config.get("normalization"))
+
+        # Update feature selection method
+        self.feature_selection = self._get_feature_selection_method(self.config.get("feature_selection"))
+
+        # Update dimensionality reduction method
+        self.dim_reduction = self._get_dim_reduction_method(self.config.get("dim_reduction"))
+
+        # Update batch correction method
+        self.batch_corr = self._get_batch_corr_method(self.config.get("batch_corr"))
+
+        # Update visualization method
+        self.visualization = self._get_visualization_method(self.config.get("visualization"))
+
+        # TODO correct ordering of steps ?
+        self.steps = [self.ambient, self.doublets, self.normalization, self.feature_selection,
+                    self.dim_reduction, self.batch_corr]
+
+        return None
+
+         
     def _get_ambient_method(self, ambient_config):
         if ambient_config is None:
             return None
@@ -180,7 +216,17 @@ class Pipeline():
                 
         return self.adata
     
-    def visualize(self,) -> None:
+    def visualize(self, color_key = 'method') -> None:
+        
+        sc.pl.pca(self.adata, color = color_key) # plot 2D pca 
+        
+        self.visualization(self.adata) # create umap-like plots
+        sc.pl.umap(self.adata, color = color_key, )
+        
+        # TODO allow 3D plots with plotly
+        
+        
+        
         
         
         return None
