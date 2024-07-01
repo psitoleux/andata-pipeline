@@ -227,16 +227,16 @@ class Pipeline():
     def visualize(self, color_key = 'method') -> None:
        
         print('outputting pca plot...') 
-        out = sc.pl.pca(self.adata, color = color_key) # plot 2D pca 
+        fig_pca = sc.pl.pca(self.adata, color = color_key, annotate_var_explained = True, return_fig = True) # plot 2D pca 
         
-        print('output', out)
+        
         
         self.visualization(adata=self.adata) # create umap-like plots
         sc.pl.umap(self.adata, color = color_key, )
         
         # TODO allow 3D plots with plotly
         from plots import pca_3d
-        pca_3d(self.adata, color = color_key) 
+        pca_3d(self.adata, color_key = color_key) 
         
         return None
     
