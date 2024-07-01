@@ -61,11 +61,18 @@ def pca_3d(adata: sc.AnnData, color_key : str = 'method') -> go.Figure:
     
     fig = px.scatter_3d(x=x, y=y, z=z,
               color=adata.obs[color_key])
-              
-    fig.update_layout(xaxis_title=labels[0] , yaxis_title=labels[1], zaxis_title=labels[2])
-    
+
+    fig.update_layout( scene = dict(xaxis_title=labels[0] 
+                                    , yaxis_title=labels[1]
+                                    , zaxis_title=labels[2]))
+                      
+
     fig.update_traces(marker_size = 1)
     fig.show()
     
-    
+    scene = dict(
+                    xaxis_title='X AXIS TITLE',
+                    yaxis_title='Y AXIS TITLE',
+                    zaxis_title='Z AXIS TITLE'),
+
     return fig 
