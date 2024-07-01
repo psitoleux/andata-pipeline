@@ -4,6 +4,7 @@ from parser import get_config
 
 from utils import is_outlier
 
+
 config = {
     "outlier_keys" : ["n_counts", "n_genes"],
     
@@ -222,7 +223,7 @@ class Pipeline():
         
         print(out)
         
-        self.visualization(self.adata) # create umap-like plots
+        self.visualization(adata=self.adata) # create umap-like plots
         sc.pl.umap(self.adata, color = color_key, )
         
         # TODO allow 3D plots with plotly

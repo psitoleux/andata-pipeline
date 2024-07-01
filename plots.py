@@ -4,6 +4,9 @@ import scanpy as sc
 
 import matplotlib
 import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+
 
 def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotlib.figure.Figure:
     """
@@ -49,4 +52,13 @@ def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotli
     # Return the figure
     return fig
     
+def pca_3d(adata: sc.AnnData, color_key : str = 'method') -> go.Figure:
+        
+    x,y,z = adata.obsm['X_pca'][:,0], adata.obsm['X_pca'][:,1], adata.obsm['X_pca'][:,2]
+    fig = px.scatter_3d(x=x, y=y, z=z,
+              color=adata.obs[color_key])
     
+    fig.update_traces(marker_size = 1)
+    fig.show()
+    
+    return fig 
