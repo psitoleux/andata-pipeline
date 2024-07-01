@@ -1,7 +1,5 @@
 import numpy as np 
 import scanpy as sc
-from abc import ABC
-from modules.abmodule import Module
 
 config = {
     "outlier_keys" : ["n_counts", "n_genes"],
@@ -16,14 +14,17 @@ config = {
     "batch_corr" : True
 }
     
-class Pipeline(Module):
+class Pipeline():
     
     def __init__(self, config: dict):
         
         self.input = config.get("input")
         self.output = config.get("output")
         
+        print("Loading data...") 
         adata = sc.read(self.input)
+        
+        print('Making gene names unique...')
         adata.var_names_make_unique()
         
         self.raw = adata.copy()
