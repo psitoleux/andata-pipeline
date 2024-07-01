@@ -4,6 +4,9 @@ from parser import get_config
 
 from utils import is_outlier
 
+import os
+from urllib.request import urlretrieve
+
 
 config = {
     "outlier_keys" : ["n_counts", "n_genes"],
@@ -22,19 +25,32 @@ class Pipeline():
     
     def __init__(self, config: dict = None) -> None:
         
+        self.config = get_config() if config is None else config
+ 
         self.input = config.get("input")
         self.output = config.get("output")
+        self.online_link = config.get("online_link")
         self.figures_dir = './figures/'
+        
+        if self.input is None and self.online_link is not None:
+            print("Downloading data...")
+            self.input = self._download_file(self.online_link)
+        
+        if not os.path.isfile(self.input):
+            if self.online_link is not None:
+                print(f"File {self.input} not found locally. Downloading data...")
+                self.input = self._download_file(self.online_link)
+            else:
+                raise FileNotFoundError(f"Input file {self.input} not found and no online link provided.")        
         
         print("Loading data...") 
         adata = sc.read(self.input, cache = True)
-        
+    
         print('Making gene names unique...')
         adata.var_names_make_unique()
         
         self.raw = adata.copy()
         self.adata = adata
-        self.config = get_config() if config is None else config
         self._update_config()        
         
         del adata
@@ -87,12 +103,20 @@ class Pipeline():
                     self.dim_reduction, self.batch_corr]
 
         return None
+    
+    
 
     def _reset_adata(self) -> None:
         self.adata = self.raw.copy()
         
         return None
          
+         
+    def _download_file(self, url: str) -> str:
+        file_name = url.split('/')[-1]
+        urllib.request.urlretrieve(url, file_name)
+        return file_name
+    
     def _get_ambient_method(self, ambient_config):
         if ambient_config is None:
             return None
