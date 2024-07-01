@@ -1,6 +1,8 @@
 import numpy as np 
 import scanpy as sc
 
+from utils import is_outlier
+
 config = {
     "outlier_keys" : ["n_counts", "n_genes"],
     
