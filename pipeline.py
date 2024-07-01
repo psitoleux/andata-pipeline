@@ -141,6 +141,7 @@ class Pipeline():
             
         self.adata = self.adata[(~self.adata.obs.outlier) & (~self.adata.obs.mt_outlier)].copy()
         
+        print('Outliers removed') 
         
     def tag(self, tags : dict) -> None:
         """
@@ -171,14 +172,15 @@ class Pipeline():
         
         self.tag({"mt" : ("MT-", 0), "ribo" : (("RPS","RPL"), 0), "hb" : ("^HB[^(P)]", 1)})
         self.outliers()
-        
+       
+        print('running normalization, feature selection, dim reduction, and batch correction...')
         for step in [self.normalization, self.feature_selection, self.dim_reduction, self.batch_corr]:
             if step is not None:
-                self.adata = step(self.adata)
+                step(self.adata)
                 
         return self.adata
     
-    def visualize(self) -> None:
+    def visualize(self,) -> None:
         
         
         return None
