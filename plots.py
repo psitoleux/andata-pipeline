@@ -52,32 +52,35 @@ def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotli
     # Return the figure
     return fig
     
-def pca_3d(adata: sc.AnnData, color_key : str = 'method') -> go.Figure:
-        
-    x,y,z = adata.obsm['X_pca'][:,0], adata.obsm['X_pca'][:,1], adata.obsm['X_pca'][:,2]
+def pca3D(adata: sc.AnnData, idx: list = [0, 1, 2]) -> go.Figure:
+    """
+    Creates a 3D PCA scatter plot using Plotly.
+
+    Parameters:
+    adata (sc.AnnData): Annotated data containing PCA information.
+    color_key (str): Key in adata.obs to use for coloring.
+    idx (list): Indices of PCA components to plot (default: [0, 1, 2])
+
+    Returns:
+    go.Figure: Plotly 3D scatter plot figure.
+    """
+
+    # Extract PCA coordinates
+    x, y, z = adata.obsm['X_pca'][:, idx[0]], adata.obsm['X_pca'][:, idx[1]], adata.obsm['X_pca'][:, idx[2]]
+    
+    # Extract variance ratios for axes labels
     variance_ratio = adata.uns['pca']['variance_ratio']
-     
-    labels = ['PC' + str(i) + "{:10.4f}".format(variance_ratio[i]) for i in range(1, 4)]
-    
-    fig = px.scatter_3d(x=x, y=y, z=z,
-              color=adata.obs[color_key])
+    labels = [f'PC{i+1} ({variance_ratio[i]:.4f})' for i in idx]
 
-    fig.update_layout( scene = dict(xaxis_title=labels[0] 
-                                    , yaxis_title=labels[1]
-                                    , zaxis_title=labels[2]))
-                      
+    # Call plot3D function to generate the plot
+    fig = plot3D(x=np.array([x, y, z]).T, colors=adata.obs, title='PCA 3D Plot', labels=labels)
 
-    fig.update_traces(marker_size = 1)
-    fig.show()
-    
-    scene = dict(
-                    xaxis_title='X AXIS TITLE',
-                    yaxis_title='Y AXIS TITLE',
-                    zaxis_title='Z AXIS TITLE'),
-
-    return fig 
-
-def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], labels: list = ['X', 'Y', 'Z']) -> go.Figure:
+    return fig
+def plot3D(x: np.ndarray
+           , colors: pd.DataFrame
+           , title: str
+           , idx: np.ndarray = [0, 1, 2]
+           , labels = ['X', 'Y', 'Z']) -> go.Figure:
     """
     This function creates a 3D scatter plot based on the input data.
 
@@ -91,19 +94,20 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
     go.Figure: 3D scatter plot figure
     """
 
+    df = colors 
     # Extract x, y, z coordinates
-    x, y, z = x[:, idx[0]], x[:, idx[1]], x[:, idx[2]]
+    df['x'], df['y'], df['z'] = x[:, idx[0]], x[:, idx[1]], x[:, idx[2]]
 
     # Determine categorical and continuous variables
     categorical_cols = []
     continuous_cols = []
 
     # Identify categorical and continuous columns
-    for col in colors:
-        ctype = colors[col].dtype
+    for col in df.columns:
+        ctype = df[col].dtype
         if isinstance(ctype, pd.CategoricalDtype) or isinstance(ctype, pd.StringDtype):
             categorical_cols.append(col)
-        elif pd.api.types.is_numeric_dtype(colors[col]):
+        elif pd.api.types.is_numeric_dtype(df[col]):
             continuous_cols.append(col)
 
     # Define color options dictionary
@@ -126,12 +130,12 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
     # Add traces for each color option
     for label, col in color_options.items():
         if col in categorical_cols:  # Categorical
-            for i, cat in enumerate(colors[col].unique()):
+            for i, cat in enumerate(df[col].unique()):
                 fig.add_trace(
                     go.Scatter3d(
-                        x=colors[colors[col] == cat]['x'],
-                        y=colors[colors[col] == cat]['y'],
-                        z=colors[colors[col] == cat]['z'],
+                        x=df[df[col] == cat]['x'],
+                        y=df[df[col] == cat]['y'],
+                        z=df[df[col] == cat]['z'],
                         mode='markers',
                         marker=dict(color=category_colors[i % len(category_colors)]),
                         name=f"{label}: {cat}",
@@ -141,12 +145,12 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
         else:  # Continuous
             fig.add_trace(
                 go.Scatter3d(
-                    x=x,
-                    y=y,
-                    z=z,
+                    x=df['x'],
+                    y=df['y'],
+                    z=df['z'],
                     mode='markers',
                     marker=dict(
-                        color=colors[col],
+                        color=df[col],
                         colorbar=dict(title=label),
                         colorscale='Viridis'
                     ),
@@ -164,7 +168,7 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
     for label, col in color_options.items():
         visibility = [False] * len(fig.data)
         if col in categorical_cols:  # Categorical
-            for _ in colors[col].unique():
+            for _ in df[col].unique():
                 visibility[index] = True
                 index += 1
         else:  # Continuous
@@ -195,7 +199,13 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
             )], 
             scene=dict(xaxis_title=labels[0], yaxis_title=labels[1], zaxis_title=labels[2])
     )
+    # Small markers 
+    
+    fig.update_traces(marker=dict(size=1))
 
+    # Set plot title
+    fig.update_layout(title=title)
+     
     # Display the plot
     fig.show()
     
