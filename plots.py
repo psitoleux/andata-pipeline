@@ -8,6 +8,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 
+from plotutils import *
+
 def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotlib.figure.Figure:
     """
     Plot the joint distribution of two genes.
@@ -76,6 +78,65 @@ def pca3D(adata: sc.AnnData, idx: list = [0, 1, 2]) -> go.Figure:
     fig = scatter3D(x=np.array([x, y, z]).T, colors=adata.obs, title='PCA 3D Plot', labels=labels)
 
     return fig
+
+
+def scatter2D(x: np.ndarray
+           , colors: pd.DataFrame
+           , title: str
+           , idx: np.ndarray = [0, 1]
+           , labels = ['X', 'Y']) -> go.Figure:
+    """
+    This function creates a 2D scatter plot based on the input data.
+
+    Parameters:
+    x (np.ndarray): Input data for the plot
+    idx (np.ndarray): Indices for selecting the columns
+    labels (list): Labels for x, y axes
+    colors (pd.DataFrame): Color data for the plot
+
+    Returns:
+    go.Figure: 2D scatter plot figure
+    """
+    # Extract x, y coordinates
+    df = extract_coordinates(x, colors, idx, dim = 2)
+    
+    categorical_cols, continuous_cols = determine_variable_types(df)
+
+    # Define color options dictionary
+    color_options = create_color_options(df, categorical_cols, continuous_cols)
+
+    # Generate color palette for categorical variable
+    category_colors = px.colors.qualitative.Set1
+
+    # Create a new 2D scatter plot
+    fig = go.Figure()
+
+    fig = add_traces(fig, df, color_options, category_colors, dim=2)
+    
+    fig.data[0].visible = True
+    
+    # Create menu buttons
+    
+    menu_buttons = create_menu_buttons(fig, color_option, categorical_cols, df)
+    
+    fig = update_layout_menus(fig, menu_buttons)
+    
+    # Set title
+    fig.update_layout(title=title, xaxis_title=labels[0], yaxis_title=labels[1])
+    
+    # Axes labels
+    
+    fig.update_layout(xaxis_title=labels[0], yaxis_title=labels[1])
+    
+    fig.update_trace(marker=dict(size=1))
+    
+    fig.update_layout(title=title)
+    
+    fig.show()
+    
+    return fig
+    
+
 def scatter3D(x: np.ndarray
            , colors: pd.DataFrame
            , title: str
@@ -139,137 +200,41 @@ def scatter3D(x: np.ndarray
     
     return fig 
 
-def determine_variable_types(df: pd.DataFrame):
-    categorical_cols = []
-    continuous_cols = []
-    
-    for col in df.columns:
-        ctype = df[col].dtype
-        if isinstance(ctype, pd.CategoricalDtype) or isinstance(ctype, pd.StringDtype):
-            categorical_cols.append(col)
-        else:
-            continuous_cols.append(col)
-    
-    return categorical_cols, continuous_cols
-
-def create_color_options(df: pd.DataFrame, categorical_cols: list, continuous_cols: list):
-    color_options = {}
-    
-    for col in categorical_cols:
-        color_options[f'{col} (Categorical)'] = col
-    
-    for col in continuous_cols:
-        color_options[f'{col} (Continuous)'] = col
-    
-    return color_options
 
 
-def create_menu_buttons(fig: go.Figure, color_options: dict, categorical_cols: list, df : pd.DataFrame):
-    menu_buttons = []
-    index = 0
-    for label, col in color_options.items():
-        visibility = [False] * len(fig.data)
-        if col in categorical_cols:  # Categorical
-            for _ in df[col].unique():
-                visibility[index] = True
-                index += 1
-        else:  # Continuous
-            visibility[index] = True
-            index += 1
-        
-        menu_buttons.append(
-            dict(
-                args=[{"visible": visibility}],
-                label=label,
-                method="update"
-            )
-        )       
 
-    return menu_buttons
-
-def extract_coordinates(x: np.ndarray, df : pd.DataFrame, idx: list, dim: int):
-    df['x'], df['y'] = x[:, idx[0]], x[:, idx[1]]
-    if dim == 3:
-        df['z'] = x[:, idx[2]]
-    return df
-
-def add_traces(fig: go.Figure, df: pd.DataFrame, color_options: dict, category_colors: list, dim: int):
-    for label, col in color_options.items():
-        if col in df.columns:
-            if isinstance(df[col].dtype, (pd.CategoricalDtype, pd.StringDtype)):
-                for i, cat in enumerate(df[col].unique()):
-                    if dim == 2:
-                        fig.add_trace(
-                            go.Scatter(
-                                x=df[df[col] == cat]['x'],
-                                y=df[df[col] == cat]['y'],
-                                mode='markers',
-                                marker=dict(color=category_colors[i % len(category_colors)]),
-                                name=f"{label}: {cat}",
-                                visible=False
-                            )
-                        )
-                    elif dim == 3:
-                        fig.add_trace(
-                            go.Scatter3d(
-                                x=df[df[col] == cat]['x'],
-                                y=df[df[col] == cat]['y'],
-                                z=df[df[col] == cat]['z'],
-                                mode='markers',
-                                marker=dict(color=category_colors[i % len(category_colors)]),
-                                name=f"{label}: {cat}",
-                                visible=False
-                            )
-                        )
-            else:
-                if dim == 2:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df['x'],
-                            y=df['y'],
-                            mode='markers',
-                            marker=dict(
-                                color=df[col],
-                                colorbar=dict(title=label),
-                                colorscale='Viridis'
-                            ),
-                            name=label,
-                            visible=False
-                        )
-                    )
-                elif dim == 3:
-                    fig.add_trace(
-                        go.Scatter3d(
-                            x=df['x'],
-                            y=df['y'],
-                            z=df['z'],
-                            mode='markers',
-                            marker=dict(
-                                color=df[col],
-                                colorbar=dict(title=label),
-                                colorscale='Viridis'
-                            ),
-                            name=label,
-                            visible=False
-                        )
-                    )
-    return fig
+def heatmap_with_annotations(matrix: np.ndarray, labels: list):
 
 
-def update_layout_menu(fig: go.Figure, menu_buttons: list):
-   fig.update_layout(
-        updatemenus=[
-            dict(
-                active=0,
-                buttons=menu_buttons,
-                direction="down",
-                pad={"r": 10, "t": 10},
-                showactive=True,
-                x=0.1,
-                xanchor="left",
-                y=1.15,
-                yanchor="top"
-            )], 
+    # Create a list of gene name annotations
+    annotations = [
+        [dict(text=[i], x=i, y=j, xref='x1', yref='y1', showarrow=False) 
+        for i in range(len(labels))] 
+        for j in range(len(labels))
+    ]
+
+    # Create the heatmap figure
+    fig = go.Figure(data=go.Heatmap(
+            z=matrix,
+            x=labels,
+            y=labels,
+            colorscale='Viridis',
+            colorbar=dict(title='Correlation'),
+            hoverongaps=False,
+            hovertemplate='Gene A: %{y}<br>Gene B: %{x}<br>Correlation: %{z}<extra></extra>'
+        ))
+
+    # Update layout
+    fig.update_layout(
+        title='Gene Expression Correlation Matrix',
+        xaxis_title='Genes',
+        yaxis_title='Genes',
+        width=1600,
+        height=1600,
+        xaxis=dict(side='top')
     )
-   
-   return fig
+
+    # Show the plot
+    fig.show()
+    
+    return fig

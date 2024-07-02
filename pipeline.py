@@ -10,6 +10,7 @@ from urllib.request import urlretrieve
 import pickle
 
 
+
 config = {
     "outlier_keys" : ["n_counts", "n_genes"],
     
@@ -96,7 +97,10 @@ class Pipeline():
         Returns:
             None
         """
-
+        
+        # Update timestamp (to have distsinct filenames)
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
+        
         # Update outlier keys
         self.outlier_keys = self.config.get("outlier_keys")
         self.do_qc = self.config.get("qc")
@@ -225,6 +229,18 @@ class Pipeline():
         
         return self.cycle_genes
     
+    def _get_yamanaka_factors(self) -> list:
+        
+        yamanaka_factors = [
+            "POU5F1",  # Also known as OCT4
+            "SOX2",
+            "KLF4",
+            "MYC"      # Also known as c-MYC
+            ]
+        
+        return yamanaka_factors
+    
+    
     def _save_gene_lists(self, tosave : list, filename : str) -> None:
         
         with open("gene_lists/" + filename + ".pkl", 'wb') as f:
@@ -253,6 +269,7 @@ class Pipeline():
             print("Removing MT outliers...") 
   
             self.adata = self.adata[(~self.adata.obs.outlier) & (~self.adata.obs.mt_outlier)].copy()
+            
         
             print('Outliers removed') 
         
@@ -291,10 +308,10 @@ class Pipeline():
         if self.normalization is not None:
             self.normalization(self.adata)
         
-        if self.ambient is not None:
+        if self.ambient is not None and self.do_qc:
             self.adata = self.ambient(self.adata)
             
-        if self.doublets is not None:
+        if self.doublets is not None and self.do_qc:
             self.adata = self.doublets(self.adata)
             
         
@@ -311,15 +328,16 @@ class Pipeline():
         print(self._get_cycle_genes())
         print('passed')
     
-    def visualize(self) -> None:
-        
-        print('outputting pca plot...') 
-        fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
+    def visualize(self, n_dim = 2) -> None:
         
         
+        if n_dim == 2: 
+            print('outputting pca plot...') 
+            fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
+
         #print('creating 2d embedding plot...')
-        #self.visualization(adata=self.adata) # create umap-like plots
-        #sc.pl.umap(self.adata, color = color_key, )
+        self.visualization(adata=self.adata) # create umap-like plots
+        sc.pl.umap(self.adata, color = color_key, )
         
         # TODO allow 3D plots with plotly
         from plots import pca3D
@@ -343,13 +361,53 @@ class Pipeline():
     def analysis(self) -> None:
         
         cycle_genes = self._get_cycle_genes()
+        high_var_no_cycle_idx = (self.adata.var['highly_variable'] != (self.adata.var['highly_variable'] 
+                                                        & self.adata.var['GeneName'].isin(cycle_genes))) 
+        
+        relevant_genes = self.adata.var['GeneName'][high_var_no_cycle_idx]
+        
+        A = self.adata[:, high_var_no_cycle_idx].X.toarray()
+        
+        correlations = np.corrcoef(A, rowvar=False)
+        covariances = np.cov(A, rowvar=False)
+        
+        coupling_matrix = np.linalg.pinv(covariances)
+        
+        import rpy2.robjects.numpy2ri
+        from rpy2.robjects.packages import importr
+        
+        rpy2.robjects.numpy2ri.activate()
+
+        # Import R package seriation
+        seriation = importr('seriation')
+        def reorder_labels_and_matrix(labels, matrix):
+            # Convert Python numpy matrix to R matrix
+            r_matrix = rpy2.robjects.r.matrix(matrix, nrow=matrix.shape[0], ncol=matrix.shape[1])
+
+            # Call seriate function from seriation package
+            ordered_indices = seriation.seriate(r_matrix)
+            
+            # Convert R indices back to Python + making sure they have the right shape
+            ordered_indices = (np.array(ordered_indices)-1).flatten() 
+
+            # Convert ordered indices back to Python
+            ordered_matrix = matrix[np.ix_(ordered_indices, ordered_indices)]
+            ordered_labels = [labels[i] for i in ordered_indices]
+
+            return ordered_labels, ordered_matrix
+        
+        
+        from plots import heatmap_with_annotations
+        
+        labels_corr, corr_ordered = reorder_labels_and_matrix(relevant_genes, correlations)
+        
+        fig = heatmap_with_annotations(corr_ordered, labels_corr)
+
         
         
         # TODO PCA Variance ratio plot
         
         # TODO correlation matrix 
-        
-        A = self.adata.X
         
         return None
     
