@@ -88,6 +88,7 @@ class Pipeline():
 
         # Update outlier keys
         self.outlier_keys = self.config.get("outlier_keys")
+        self.do_qc = self.config.get("qc")
 
         # Update ambient method
         self.ambient = self._get_ambient_method(self.config.get("ambient"))

@@ -1,3 +1,4 @@
+import argparse
 from argparse import ArgumentParser, Namespace
 from ast import literal_eval
 from configparser import ConfigParser
@@ -13,6 +14,8 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--output", type=str, help="output", default="./out/")
     
     parser.add_argument("--outlier_keys", type=literal_eval, help="outlier_keys", default="['mt']")
+    parser.add_argument("--qc", action=argparse.BooleanOptionalAction)
+    
     
     
      
