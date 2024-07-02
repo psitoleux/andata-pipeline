@@ -99,11 +99,11 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
     continuous_cols = []
 
     # Identify categorical and continuous columns
-    for col in df.columns:
-        ctype = df[col].dtype
+    for col in colors:
+        ctype = colors[col].dtype
         if isinstance(ctype, pd.CategoricalDtype) or isinstance(ctype, pd.StringDtype):
             categorical_cols.append(col)
-        elif pd.api.types.is_numeric_dtype(df[col]):
+        elif pd.api.types.is_numeric_dtype(colors[col]):
             continuous_cols.append(col)
 
     # Define color options dictionary
@@ -126,12 +126,12 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
     # Add traces for each color option
     for label, col in color_options.items():
         if col in categorical_cols:  # Categorical
-            for i, cat in enumerate(df[col].unique()):
+            for i, cat in enumerate(colors[col].unique()):
                 fig.add_trace(
                     go.Scatter3d(
-                        x=df[df[col] == cat]['x'],
-                        y=df[df[col] == cat]['y'],
-                        z=df[df[col] == cat]['z'],
+                        x=colors[colors[col] == cat]['x'],
+                        y=colors[colors[col] == cat]['y'],
+                        z=colors[colors[col] == cat]['z'],
                         mode='markers',
                         marker=dict(color=category_colors[i % len(category_colors)]),
                         name=f"{label}: {cat}",
@@ -141,12 +141,12 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
         else:  # Continuous
             fig.add_trace(
                 go.Scatter3d(
-                    x=df['x'],
-                    y=df['y'],
-                    z=df['z'],
+                    x=x,
+                    y=y,
+                    z=z,
                     mode='markers',
                     marker=dict(
-                        color=df[col],
+                        color=colors[col],
                         colorbar=dict(title=label),
                         colorscale='Viridis'
                     ),
@@ -164,7 +164,7 @@ def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], lab
     for label, col in color_options.items():
         visibility = [False] * len(fig.data)
         if col in categorical_cols:  # Categorical
-            for _ in df[col].unique():
+            for _ in colors[col].unique():
                 visibility[index] = True
                 index += 1
         else:  # Continuous

@@ -41,14 +41,14 @@ class Pipeline():
         if not os.path.exists(self.figures_dir):
             os.makedirs(self.figures_dir)  
     
-        if self.input is None and self.online_link is not None:
+        if self.input_file is None and self.online_link is not None:
             print("Downloading data...")
-            self.input = self._download_file(self.online_link)
+            self.input_file = self._download_file(self.online_link)
         
-        if not os.path.isfile(self.input):
+        if not os.path.isfile(self.input_file):
             if self.online_link is not None:
                 print(f"File {self.input} not found locally. Downloading data...")
-                self.input = self._download_file(self.online_link)
+                self.input_file = self._download_file(self.online_link)
             else:
                 raise FileNotFoundError(f"Input file {self.input} not found and no online link provided.")        
         
@@ -56,7 +56,7 @@ class Pipeline():
 
         
         print("Loading data...") 
-        adata = sc.read(self.input, cache = True)
+        adata = sc.read(self.input_file, cache = True)
     
         print('Making gene names unique...')
         adata.var_names_make_unique()
@@ -291,7 +291,8 @@ class Pipeline():
         from plots import plot3D
         self.visualization(self.adata, 3)
         
-        plot3D(self.adata.obsm['X_umap'], color = self.adata.obs)
+        print('creating 3d umap plot...') 
+        plot3D(self.adata.obsm['X_umap'], colors = self.adata.obs)
         
         print('done')
         
