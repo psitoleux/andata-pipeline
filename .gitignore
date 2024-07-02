@@ -3,6 +3,10 @@
 *.h5ad
 *.csv
 
+# Output/saved dir
+
+output/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

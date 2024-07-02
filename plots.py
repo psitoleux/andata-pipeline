@@ -76,3 +76,128 @@ def pca_3d(adata: sc.AnnData, color_key : str = 'method') -> go.Figure:
                     zaxis_title='Z AXIS TITLE'),
 
     return fig 
+
+def plot3D(x: np.ndarray, colors: pd.DataFrame, idx: np.ndarray = [0, 1, 2], labels: list = ['X', 'Y', 'Z']) -> go.Figure:
+    """
+    This function creates a 3D scatter plot based on the input data.
+
+    Parameters:
+    x (np.ndarray): Input data for the plot
+    idx (np.ndarray): Indices for selecting the columns
+    labels (list): Labels for x, y, and z axes
+    colors (pd.DataFrame): Color data for the plot
+
+    Returns:
+    go.Figure: 3D scatter plot figure
+    """
+
+    # Extract x, y, z coordinates
+    x, y, z = x[:, idx[0]], x[:, idx[1]], x[:, idx[2]]
+
+    # Determine categorical and continuous variables
+    categorical_cols = []
+    continuous_cols = []
+
+    # Identify categorical and continuous columns
+    for col in df.columns:
+        ctype = df[col].dtype
+        if isinstance(ctype, pd.CategoricalDtype) or isinstance(ctype, pd.StringDtype):
+            categorical_cols.append(col)
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            continuous_cols.append(col)
+
+    # Define color options dictionary
+    color_options = {}
+
+    # Add categorical color options
+    for col in categorical_cols:
+        color_options[f'{col} (Categorical)'] = col
+
+    # Add continuous color options
+    for col in continuous_cols:
+        color_options[f'{col} (Continuous)'] = col
+
+    # Generate color palette for categorical variable
+    category_colors = px.colors.qualitative.Set1
+
+    # Create a new 3D scatter plot
+    fig = go.Figure()
+
+    # Add traces for each color option
+    for label, col in color_options.items():
+        if col in categorical_cols:  # Categorical
+            for i, cat in enumerate(df[col].unique()):
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=df[df[col] == cat]['x'],
+                        y=df[df[col] == cat]['y'],
+                        z=df[df[col] == cat]['z'],
+                        mode='markers',
+                        marker=dict(color=category_colors[i % len(category_colors)]),
+                        name=f"{label}: {cat}",
+                        visible=False
+                    )
+                )
+        else:  # Continuous
+            fig.add_trace(
+                go.Scatter3d(
+                    x=df['x'],
+                    y=df['y'],
+                    z=df['z'],
+                    mode='markers',
+                    marker=dict(
+                        color=df[col],
+                        colorbar=dict(title=label),
+                        colorscale='Viridis'
+                    ),
+                    name=label,
+                    visible=False
+                )
+            )
+
+    # Make the first trace visible
+    fig.data[0].visible = True
+
+    # Create the menu buttons
+    menu_buttons = []
+    index = 0
+    for label, col in color_options.items():
+        visibility = [False] * len(fig.data)
+        if col in categorical_cols:  # Categorical
+            for _ in df[col].unique():
+                visibility[index] = True
+                index += 1
+        else:  # Continuous
+            visibility[index] = True
+            index += 1
+        
+        menu_buttons.append(
+            dict(
+                args=[{"visible": visibility}],
+                label=label,
+                method="update"
+            )
+        )
+
+    # Add dropdown menu to the plot
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                active=0,
+                buttons=menu_buttons,
+                direction="down",
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=0.1,
+                xanchor="left",
+                y=1.15,
+                yanchor="top"
+            )], 
+            scene=dict(xaxis_title=labels[0], yaxis_title=labels[1], zaxis_title=labels[2])
+    )
+
+    # Display the plot
+    fig.show()
+    
+    
+    return fig 

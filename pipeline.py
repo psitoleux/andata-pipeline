@@ -4,7 +4,8 @@ from parser import get_config
 
 from utils import is_outlier
 
-import os
+import os, json
+from datetime import datetime
 from urllib.request import urlretrieve
 
 
@@ -27,11 +28,19 @@ class Pipeline():
         
         self.config = get_config() if config is None else config
  
-        self.input = config.get("input")
-        self.output = config.get("output")
+        self.input_file = config.get("input")
         self.online_link = config.get("online_link")
+
+        self.output_dir = config.get("output")
         self.figures_dir = './figures/'
-        
+     
+        # Check if figures directory exists, if not, create it
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+
+        if not os.path.exists(self.figures_dir):
+            os.makedirs(self.figures_dir)  
+    
         if self.input is None and self.online_link is not None:
             print("Downloading data...")
             self.input = self._download_file(self.online_link)
@@ -42,6 +51,9 @@ class Pipeline():
                 self.input = self._download_file(self.online_link)
             else:
                 raise FileNotFoundError(f"Input file {self.input} not found and no online link provided.")        
+        
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         
         print("Loading data...") 
         adata = sc.read(self.input, cache = True)
@@ -267,17 +279,51 @@ class Pipeline():
         fig_pca = sc.pl.pca(self.adata, color = color_key, annotate_var_explained = True, return_fig = True) # plot 2D pca 
         
         
-        print('creating 2d embedding plot...')
-        self.visualization(adata=self.adata) # create umap-like plots
-        sc.pl.umap(self.adata, color = color_key, )
+        #print('creating 2d embedding plot...')
+        #self.visualization(adata=self.adata) # create umap-like plots
+        #sc.pl.umap(self.adata, color = color_key, )
         
         # TODO allow 3D plots with plotly
         from plots import pca_3d
         print('creating 3d interactive pca plot...')
-        pca_3d(self.adata, color_key = color_key) 
+        pca_3d(self.adata, color_key = color_key)
+        
+        from plots import plot3D
+        self.visualization(self.adata, 3)
+        
+        plot3D(self.adata.obsm['X_umap'], color = self.adata.obs)
+        
+        print('done')
+        
+        
         
         return None
     
     def analysis(self) -> None:
         
         return None
+    
+    def save(self) -> None:
+        """
+        Saves the AnnData object and the configuration to separate files in a subdirectory.
+        The subdirectory is named "output_<timestamp>" and is created in the output directory specified in the configuration.
+        """
+        # Create subdirectory in the output directory
+        subdirectory = os.path.join(self.output, f"output_{self.timestamp}")
+        os.makedirs(subdirectory, exist_ok=True)
+        
+        # Save AnnData object
+        adata_filename = os.path.join(subdirectory, f"adata_{self.timestamp}.h5ad")
+        print(f"Saving AnnData to {adata_filename}...")
+        self.adata.write(adata_filename)
+        
+        # Save configuration
+        config_filename = os.path.join(subdirectory, f"config_{self.timestamp}.json")
+        print(f"Saving configuration to {config_filename}...")
+        with open(config_filename, 'w') as config_file:
+            # Write the configuration to the file
+            json.dump(self.config, config_file, indent=4)
+
+        print("Save complete.")
+
+
