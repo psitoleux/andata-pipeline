@@ -329,33 +329,25 @@ class Pipeline():
         print('passed')
     
     def visualize(self, n_dim = 2) -> None:
+        from plots import scatter3D, pca3D
         
-        
+        self.visualization(self.adata, n_dim)            
+
         if n_dim == 2: 
+            
             print('outputting pca plot...') 
             fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
 
-        #print('creating 2d embedding plot...')
-        self.visualization(adata=self.adata) # create umap-like plots
-        sc.pl.umap(self.adata, color = color_key, )
+            sc.pl.umap(self.adata, color = color_key, )
+            
+            X_ = np.array([self.adata.obsm['X_umap'][:, 0], self.adata.obsm['X_umap'][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
+            scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = ['UMAP 1', 'UMAP 2', 'PC1'])
         
-        # TODO allow 3D plots with plotly
-        from plots import pca3D
-        print('creating 3d interactive pca plot...')
-        pca3D(self.adata)
-        
-        from plots import scatter3D
-        self.visualization(self.adata, 3)
-        
-        print('creating 3d umap plot...') 
-        scatter3D(self.adata.obsm['X_umap'], colors = self.adata.obs, title='UMAP')
-        
-        print('done')
-        
-        print('plot umap x ')
-        
-        
-        
+        if n_dim == 3:
+            
+            pca3D(self.adata)
+            scatter3D(self.adata.obsm['X_umap'], colors = self.adata.obs, title='UMAP')
+
         return None
     
     def analysis(self) -> None:
@@ -385,7 +377,7 @@ class Pipeline():
             r_matrix = rpy2.robjects.r.matrix(matrix, nrow=matrix.shape[0], ncol=matrix.shape[1])
 
             # Call seriate function from seriation package
-            ordered_indices = seriation.seriate(r_matrix)
+            ordered_indices = seriation.seriate(r_matrix, method = 'OLO_complete')
             
             # Convert R indices back to Python + making sure they have the right shape
             ordered_indices = (np.array(ordered_indices)-1).flatten() 
