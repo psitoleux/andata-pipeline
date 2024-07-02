@@ -7,6 +7,7 @@ from utils import is_outlier
 import os, json
 from datetime import datetime
 from urllib.request import urlretrieve
+import pickle
 
 
 config = {
@@ -29,6 +30,16 @@ class Pipeline():
         self.config = get_config() if config is None else config
  
         self.input_file = config.get("input")
+        
+        if self.input_file == 'thymus_raw':
+            self.input_file = 'HTA07.A01.v02.entire_data_raw_count.h5ad'
+        elif self.input_file == 'thymus_fig1': 
+            self.input_file = 'HTA08.v01.A05.Science_human_fig1.h5ad'
+            
+        
+            
+        
+        
         self.online_link = config.get("online_link")
 
         self.output_dir = config.get("output")
@@ -207,6 +218,22 @@ class Pipeline():
         else:
             return None
         
+    def _get_cycle_genes(self) -> list:
+         
+        with open('gene_lists/cycle_genes.pkl', 'rb') as f:
+            self.cycle_genes = pickle.load(f)
+        
+        return self.cycle_genes
+    
+    def _save_gene_lists(self, tosave : list, filename : str) -> None:
+        
+        with open("gene_lists/" + filename + ".pkl", 'wb') as f:
+            pickle.dump(tosave, f)
+            
+        return None
+    
+    
+            
     
     def outliers(self) -> None:
         
@@ -216,14 +243,18 @@ class Pipeline():
         self.adata.obs['outlier'] =  (is_outlier(self.adata, "log1p_total_counts", 5)
     | is_outlier(self.adata, "log1p_n_genes_by_counts", 5)
     | is_outlier(self.adata, "pct_counts_in_top_20_genes", 5))
-        
-        print("Removing MT outliers...") 
+       
         if 'mt' in self.outlier_keys:
             self.adata.obs['mt_outlier'] =  is_outlier(self.adata, "pct_counts_mt", 3) | (self.adata.obs["pct_counts_mt"] > 8)
-            
-        self.adata = self.adata[(~self.adata.obs.outlier) & (~self.adata.obs.mt_outlier)].copy()
+          
+          
         
-        print('Outliers removed') 
+        if self.do_qc:
+            print("Removing MT outliers...") 
+  
+            self.adata = self.adata[(~self.adata.obs.outlier) & (~self.adata.obs.mt_outlier)].copy()
+        
+            print('Outliers removed') 
         
     def tag(self, tags : dict) -> None:
         """
@@ -274,8 +305,14 @@ class Pipeline():
                 
         return self.adata
     
+    def test(self) -> None:
+        
+        print('testing...')
+        print(self._get_cycle_genes())
+        print('passed')
+    
     def visualize(self) -> None:
-       
+        
         print('outputting pca plot...') 
         fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
         
@@ -289,11 +326,11 @@ class Pipeline():
         print('creating 3d interactive pca plot...')
         pca3D(self.adata)
         
-        from plots import plot3D
+        from plots import scatter3D
         self.visualization(self.adata, 3)
         
         print('creating 3d umap plot...') 
-        plot3D(self.adata.obsm['X_umap'], colors = self.adata.obs, title='UMAP')
+        scatter3D(self.adata.obsm['X_umap'], colors = self.adata.obs, title='UMAP')
         
         print('done')
         
@@ -305,7 +342,14 @@ class Pipeline():
     
     def analysis(self) -> None:
         
-        A = self.adata.X 
+        cycle_genes = self._get_cycle_genes()
+        
+        
+        # TODO PCA Variance ratio plot
+        
+        # TODO correlation matrix 
+        
+        A = self.adata.X
         
         return None
     
