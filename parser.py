@@ -9,9 +9,11 @@ def get_parser() -> ArgumentParser:
     parser = ArgumentParser()
     
     parser.add_argument("--input", type=str, help="input"
-                        , default="HTA07.A01.v02.entire_data_raw_count.h5ad") 
-    
+                        , default="HTA07.A01.v02.entire_data_raw_count.h5ad")  
     parser.add_argument("--output", type=str, help="output", default="./out/")
+    parser.add_argument("--save", action=argparse.BooleanOptionalAction)
+    
+    parser.add_argument("--seed", type=int, help="seed", default=1998)
     
     parser.add_argument("--outlier_keys", type=literal_eval, help="outlier_keys", default="['mt']")
     parser.add_argument("--qc", action=argparse.BooleanOptionalAction)

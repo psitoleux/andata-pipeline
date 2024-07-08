@@ -10,6 +10,15 @@ import plotly.io as pio
 
 from plotutils import *
 
+def set_matplotlib_style():
+    plt.style.use("ggplot")
+    
+    colors = ['#332288', '#117733', '#44AA99', '#88CCEE'
+              , '#DDCC77', '#CC6677', '#AA4499', '#882255']
+
+    matplotlib.rcParams['axes.prop_cycle'] = matplotlib.cycler(
+        color= colors)
+
 def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotlib.figure.Figure:
     """
     Plot the joint distribution of two genes.
@@ -97,16 +106,18 @@ def scatter2D(x: np.ndarray
     Returns:
     go.Figure: 2D scatter plot figure
     """
-    # Extract x, y coordinates
-    df = extract_coordinates(x, colors, idx, dim = 2)
     
-    categorical_cols, continuous_cols = determine_variable_types(df)
+    categorical_cols, continuous_cols = determine_variable_types(colors)
 
     # Define color options dictionary
-    color_options = create_color_options(df, categorical_cols, continuous_cols)
+    color_options = create_color_options(colors, categorical_cols, continuous_cols)
 
     # Generate color palette for categorical variable
     category_colors = px.colors.qualitative.Set1
+
+    # Extract x, y coordinates
+    df = extract_coordinates(x, colors, idx, dim = 2)
+    
 
     # Create a new 2D scatter plot
     fig = go.Figure()
@@ -154,18 +165,20 @@ def scatter3D(x: np.ndarray
     Returns:
     go.Figure: 3D scatter plot figure
     """
+    
+    categorical_cols, continuous_cols = determine_variable_types(colors)
+
+
+    # Define color options dictionary
+    color_options = create_color_options(colors, categorical_cols, continuous_cols)
+
+    # Generate color palette for categorical variable
+    category_colors = px.colors.qualitative.Set1
+
     # Extract x, y, z coordinates
     
     df = extract_coordinates(x, colors, idx, dim = 3)
     
-    categorical_cols, continuous_cols = determine_variable_types(df)
-
-
-    # Define color options dictionary
-    color_options = create_color_options(df, categorical_cols, continuous_cols)
-
-    # Generate color palette for categorical variable
-    category_colors = px.colors.qualitative.Set1
 
     # Create a new 3D scatter plot
     fig = go.Figure()

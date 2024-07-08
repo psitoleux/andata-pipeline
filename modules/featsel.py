@@ -8,6 +8,44 @@ import rpy2.rinterface_lib.callbacks as rcb
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 
+
+def highly_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
+    
+    n_counts_per_gene = adata.X.sum(0)
+    
+    top_indices =np.argsort(n_counts_per_gene)[-n_top_genes:][::-1]
+    
+    hv_genes_bool = np.zeros(adata.X.shape[1], dtype = bool)
+
+    hv_genes_bool[top_indices] = True
+    
+    adata.var['highly_variable'] = hv_genes_bool
+
+    
+    return adata
+
+def most_often_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
+    
+    nb_cells_nonzero_per_gene = (adata.X > 0).sum(0)
+    
+    print(nb_cells_nonzero_per_gene.shape)
+    
+    top_indices = np.argsort(nb_cells_nonzero_per_gene)[-n_top_genes:][::-1]
+    
+    hv_genes_bool = np.zeros(adata.X.shape[1], dtype = bool)
+
+    hv_genes_bool[top_indices] = True
+    
+    adata.var['highly_variable'] = hv_genes_bool
+
+    
+    return adata
+
+def highly_variable_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
+    sc.pp.highly_variable_genes(adata, inplace = True) 
+    
+    return adata 
+
 def deviance(adata : sc.AnnData, raw : sc.AnnData, n_genes : int = 4_000, ) -> sc.AnnData:
     
     ro.pandas2ri.activate()

@@ -3,17 +3,29 @@ import os
 import subprocess
 
 def log1p(adata : sc.AnnData, L : int = 1e4) -> sc.AnnData:
-    sc.pp.nor:alize_total(adata, target_sum=L)
+    sc.pp.normalize_total(adata, target_sum=L)
     sc.pp.log1p(adata)
     
     return adata
 
+def pure_log1p(adata : sc.AnnData) -> sc.AnnData:
+    
+    sc.pp.log1p(adata)
+    
+    return adata
+
+def pearson_residuals(adata : sc.AnnData) -> sc.AnnData:
+    
+    sc.experimental.pp.normalize_pearson_residuals(adata)
+    
+    return adata
+    
 
 # TODO GPT-4o generated function, clean it up and understand it !!!!
 
 def sanity_normalization(
     adata: sc.AnnData,
-    sanity_executable: str = "path_to_Sanity_binary",
+    sanity_executable: str = "../Sanity/bin/Sanity.exe",
     destination_folder: str = ".",
     n_threads: int = 4,
     extended_output: bool = False,

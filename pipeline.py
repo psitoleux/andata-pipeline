@@ -1,4 +1,5 @@
-import numpy as np 
+import numpy as np
+import pandas as pd
 import scanpy as sc
 from parser import get_config
 
@@ -9,6 +10,9 @@ from datetime import datetime
 from urllib.request import urlretrieve
 import pickle
 
+import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
 
 
 config = {
@@ -26,7 +30,8 @@ config = {
     
 class Pipeline():
     
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config : dict = None) -> None:
+        
         
         self.config = get_config() if config is None else config
  
@@ -42,16 +47,18 @@ class Pipeline():
         
         
         self.online_link = config.get("online_link")
+        
+        self._save = config.get("save")
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.output_dir = config.get("output") + '/' + self.timestamp + '/'
 
-        self.output_dir = config.get("output")
-        self.figures_dir = './figures/'
+        self.figures_dir = self.output_dir + 'figures/'
      
         # Check if figures directory exists, if not, create it
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
-
-        if not os.path.exists(self.figures_dir):
-            os.makedirs(self.figures_dir)  
+        
+        if self._save:
+            os.makedirs(self.output_dir, exist_ok=True)
+            os.makedirs(self.figures_dir, exist_ok=True)
     
         if self.input_file is None and self.online_link is not None:
             print("Downloading data...")
@@ -64,7 +71,6 @@ class Pipeline():
             else:
                 raise FileNotFoundError(f"Input file {self.input} not found and no online link provided.")        
         
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         
         print("Loading data...") 
@@ -75,9 +81,13 @@ class Pipeline():
         
         self.raw = adata.copy()
         self.adata = adata
-        self._update_config()        
+        self._update_config()
+        
         
         del adata
+        
+        if self._save:
+            self.save_config()
     
     def get_new_config(self) -> None:
         
@@ -104,6 +114,9 @@ class Pipeline():
         # Update outlier keys
         self.outlier_keys = self.config.get("outlier_keys")
         self.do_qc = self.config.get("qc")
+        
+        if not self.do_qc:
+            print('! Warning: Outliers will not be excluded.')
 
         # Update ambient method
         self.ambient = self._get_ambient_method(self.config.get("ambient"))
@@ -169,6 +182,9 @@ class Pipeline():
         elif normalization_config == "log1p":
             from modules.norm import log1p
             return log1p
+        elif normalization_config == "plog1p":
+            from modules.norm import pure_log1p
+            return pure_log1p
         elif normalization_config == "pearson_residuals":
             return sc.experimental.pp.normalize_pearson_residuals
         elif normalization_config == "sanity":
@@ -181,12 +197,19 @@ class Pipeline():
         if feature_selection_config is None:
             return None
         elif feature_selection_config == "hvg":
-            return sc.pp.highly_variable_genes
+            from modules.featsel import highly_variable_genes
+            return lambda adata, n_top_genes=1800: highly_variable_genes(adata, n_top_genes=n_top_genes)
         elif feature_selection_config == "pearson":
             return sc.experimental.pp.highly_variable_genes
         elif feature_selection_config == "deviance":
             from modules.featsel import deviance
             return deviance
+        elif feature_selection_config == "heg":
+            from modules.featsel import highly_expressed_genes
+            return lambda adata, n_top_genes=1800: highly_expressed_genes(adata, n_top_genes=n_top_genes)
+        elif feature_selection_config == "moeg":
+            from modules.featsel import most_often_expressed_genes
+            return lambda adata, n_top_genes=1800: most_often_expressed_genes(adata, n_top_genes=n_top_genes)
         else:
             return None
 
@@ -253,7 +276,6 @@ class Pipeline():
     
     def outliers(self) -> None:
         
-        print("Removing outliers...") 
         sc.pp.calculate_qc_metrics(self.adata, qc_vars=self.outlier_keys, inplace=True, percent_top=[20], log1p=True)
         
         self.adata.obs['outlier'] =  (is_outlier(self.adata, "log1p_total_counts", 5)
@@ -266,7 +288,7 @@ class Pipeline():
           
         
         if self.do_qc:
-            print("Removing MT outliers...") 
+            print("Removing outliers...") 
   
             self.adata = self.adata[(~self.adata.obs.outlier) & (~self.adata.obs.mt_outlier)].copy()
             
@@ -306,7 +328,7 @@ class Pipeline():
         print('running normalization, feature selection, dim reduction, and batch correction...')
 
         if self.normalization is not None:
-            self.normalization(self.adata)
+            self.adata = self.normalization(self.adata)
         
         if self.ambient is not None and self.do_qc:
             self.adata = self.ambient(self.adata)
@@ -314,12 +336,21 @@ class Pipeline():
         if self.doublets is not None and self.do_qc:
             self.adata = self.doublets(self.adata)
             
+        if self.feature_selection is not None:
+            self.adata = self.feature_selection(self.adata) 
         
-        
-        for step in [ self.feature_selection, self.dim_reduction, self.batch_corr]:
+        for step in [self.dim_reduction, self.batch_corr]:
             if step is not None:
                 step(self.adata)
                 
+                
+        
+        nunique = self.adata.obs.nunique()
+
+        self.adata.obs = self.adata.obs.drop(nunique[nunique == 1].index, axis=1)
+        
+        print('preprocessing complete')
+         
         return self.adata
     
     def test(self) -> None:
@@ -337,12 +368,12 @@ class Pipeline():
             
             print('outputting pca plot...') 
             fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
-
-            sc.pl.umap(self.adata, color = color_key, )
             
             X_ = np.array([self.adata.obsm['X_umap'][:, 0], self.adata.obsm['X_umap'][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
-            scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = ['UMAP 1', 'UMAP 2', 'PC1'])
-        
+            fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = ['UMAP 1', 'UMAP 2', 'PC1'])
+            
+            self.save_plotly(fig_umap_pca, 'umap_pca')
+            
         if n_dim == 3:
             
             pca3D(self.adata)
@@ -352,6 +383,11 @@ class Pipeline():
     
     def analysis(self) -> None:
         
+        from plots import set_matplotlib_style
+        
+        set_matplotlib_style()
+        
+       
         cycle_genes = self._get_cycle_genes()
         high_var_no_cycle_idx = (self.adata.var['highly_variable'] != (self.adata.var['highly_variable'] 
                                                         & self.adata.var['GeneName'].isin(cycle_genes))) 
@@ -372,12 +408,13 @@ class Pipeline():
 
         # Import R package seriation
         seriation = importr('seriation')
-        def reorder_labels_and_matrix(labels, matrix):
+        
+        def reorder_labels_and_matrix(matrix, labels):
             # Convert Python numpy matrix to R matrix
             r_matrix = rpy2.robjects.r.matrix(matrix, nrow=matrix.shape[0], ncol=matrix.shape[1])
-
+            
             # Call seriate function from seriation package
-            ordered_indices = seriation.seriate(r_matrix, method = 'OLO_complete')
+            ordered_indices = seriation.seriate(r_matrix, method = 'PCA')
             
             # Convert R indices back to Python + making sure they have the right shape
             ordered_indices = (np.array(ordered_indices)-1).flatten() 
@@ -386,44 +423,203 @@ class Pipeline():
             ordered_matrix = matrix[np.ix_(ordered_indices, ordered_indices)]
             ordered_labels = [labels[i] for i in ordered_indices]
 
-            return ordered_labels, ordered_matrix
+            return ordered_matrix, ordered_labels
+        
+        if False: 
+            from plots import heatmap_with_annotations
+            
+            corr_ordered, labels_corr  = reorder_labels_and_matrix(correlations, relevant_genes)
+            
+            fig = heatmap_with_annotations(corr_ordered, labels_corr)
+            
+            coupling_ordered, labels_coupling = reorder_labels_and_matrix(log1p(coupling_matrix), relevant_genes )
+            
+            
+            log1p = lambda x: np.sign(x) * np.log(1+np.abs(x))
+            
+            fig = heatmap_with_annotations((coupling_ordered), labels_coupling)
+            
+            covariances_ordered, labels_cov = reorder_labels_and_matrix(covariances, relevant_genes)
+            
+            fig = heatmap_with_annotations(log1p(covariances_ordered), labels_cov)
         
         
-        from plots import heatmap_with_annotations
+        fig, ax = plt.subplots(figsize=(16, 9))
         
-        labels_corr, corr_ordered = reorder_labels_and_matrix(relevant_genes, correlations)
+        var_ratio = self.adata.uns['pca']['variance_ratio']
+        n_coms = len(var_ratio)
+        plt.plot(range(1, n_coms + 1), var_ratio, 'o-')
         
-        fig = heatmap_with_annotations(corr_ordered, labels_corr)
+        def top_k_off_diagonal_indices_symmetric(matrix, k):
+            # Ensure the matrix is square
+            assert matrix.shape[0] == matrix.shape[1], "The input matrix must be square."
+            
+            n = matrix.shape[0]
+            
+            # Create a mask for the upper triangular off-diagonal elements
+            mask = np.triu(np.ones((n, n), dtype=bool), k=1)
+            
+            # Extract the upper triangular off-diagonal elements
+            off_diagonal_elements = matrix[mask]
+            
+            # Get the indices of the sorted elements in descending order
+            sorted_indices = np.argsort(off_diagonal_elements)[::-1]
+            
+            # Select the top k indices
+            top_k_indices_flat = sorted_indices[:k]
+            
+            # Convert flat indices back to 2D indices
+            top_k_indices = np.vstack(np.unravel_index(np.where(mask.flatten())[0][top_k_indices_flat], (n, n))).T
+            
+            return top_k_indices
+        
+        def plot_top_k_joints(data : np.ndarray, matrix : np.ndarray, genes
+                              , title : str = ''
+                              , k :int = 9):
+            
+            top_k_indices = top_k_off_diagonal_indices_symmetric(matrix, k)
+            
+            return plot_k_joints(data, matrix, genes, top_k_indices, title, k)
+            
+         
+        def plot_k_joints(data : np.ndarray
+                          , matrix : np.ndarray
+                          , genes : pd.Series
+                          , indices : np.ndarray
+                          , title : str = ''
+                          , k : int = 9):
+                
+            
+            l = int(np.sqrt(k))
+            
+
+            fig, axs = plt.subplots(l, l, figsize=(l*4, l*4))
+
+            for i,ax in zip(range(k), axs.flat):
+                
+                genex, geney = genes.iloc[indices[i, 0]], genes.iloc[indices[i, 1]]
+
+
+                share_both_zeros = np.sum((data[:, indices[i, 0]] == 0) & (data[:, indices[i, 1]] == 0)) / data.shape[0]
+                nb_non_zeros_both = np.sum((data[:, indices[i, 0]] != 0) & (data[:, indices[i, 1]] != 0)) 
+                nb_non_zeros_x = np.sum(data[:, indices[i, 0]] != 0) 
+                nb_non_zeros_y = np.sum(data[:, indices[i, 1]] != 0)
+                
+                alpha = 0.5
+                if nb_non_zeros_both > 1000:
+                    alpha = 0.1
+                if nb_non_zeros_both > 10000:
+                    alpha = 0.01
+                
+                
+                ax.plot(data[:, indices[i, 0]]
+                        ,data[:, indices[i, 1]], 'o', markersize=2, alpha = alpha,
+                        label = genex + ' - ' + geney,
+                        color = 'C' + str(i % 10))
+                
+
+
+
+                
+ 
+                ax.set_title('share both zeros ' + '{0:.4f}'.format(share_both_zeros) 
+                             + ' \n  nb both non-zeros ' + str(nb_non_zeros_both) 
+                             + ' \n matrix value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]]))
+                ax.set_xlabel(genex + ' - ' + str(nb_non_zeros_x) + ' non-zeros' )
+                ax.set_ylabel(geney + ' - ' + str(nb_non_zeros_y) + ' non zeros' )
+                
+                ax.set_aspect('equal')
+                
+            fig.suptitle(title) 
+            plt.tight_layout()
+
+            return fig
+            
 
         
+
+
+
+        self.save_mpl(
+            plot_top_k_joints(A, coupling_matrix, relevant_genes, title='coupling-matrix')
+        )
         
-        # TODO PCA Variance ratio plot
+        self.save_mpl(
+            plot_top_k_joints(A, -coupling_matrix, relevant_genes, title = 'negative-coupling-matrix')
+        )
         
-        # TODO correlation matrix 
+        self.save_mpl(
+            plot_top_k_joints(A, correlations, relevant_genes, title = 'correlations')
+        )
+        
+        self.save_mpl(
+            plot_top_k_joints(A, -correlations, relevant_genes, title = 'negative-correlations')
+        )
+        
+        self.save_mpl(
+            plot_top_k_joints(A, covariances, relevant_genes, title = 'covariances')
+        )
+        
+        self.save_mpl(
+            plot_top_k_joints(A, -covariances, relevant_genes, title = 'negative-covariances')
+        )
+        
+        def random_offdiag_idx(N, k):
+            
+            indices = [(i,j) for i in range(N) for j in range(i+1, N)]
+            iidx = np.random.choice(len(indices), size=k, replace=False)
+            
+            return indices[iidx]
+            
+            
+        def plot_k_random_joints(data : np.ndarray, matrix : np.ndarray, genes, k = 9):
+                
+            indices = random_offdiag_idx(data.shape[1], k)
+                
+            return plot_k_joints(data, matrix, genes, indices, title = 'random-pairs', k = k)
+
+        
+        self.save_mpl(
+            plot_k_random_joints(A, coupling_matrix, relevant_genes)
+        )
+
         
         return None
     
-    def save(self) -> None:
-        """
-        Saves the AnnData object and the configuration to separate files in a subdirectory.
-        The subdirectory is named "output_<timestamp>" and is created in the output directory specified in the configuration.
-        """
-        # Create subdirectory in the output directory
-        subdirectory = os.path.join(self.output, f"output_{self.timestamp}")
-        os.makedirs(subdirectory, exist_ok=True)
+    def save_mpl(self, fig : plt.Figure, format : str = 'png') -> None:
         
-        # Save AnnData object
-        adata_filename = os.path.join(subdirectory, f"adata_{self.timestamp}.h5ad")
-        print(f"Saving AnnData to {adata_filename}...")
-        self.adata.write(adata_filename)
+        fig.savefig(self.figures_dir + '/' + fig.get_suptitle() + '.' + format
+                    , bbox_inches='tight'
+                    ,format = format
+                    , dpi = 600
+                    )
+        del fig
         
+        
+    def save_plotly(self, fig : go.Figure, name : str) -> None:
+        
+        fig.write_html(self.figures_dir + '/' + name + '.html')
+        
+        del fig
+    
+    def save_config(self) -> None:
         # Save configuration
-        config_filename = os.path.join(subdirectory, f"config_{self.timestamp}.json")
+        config_filename = os.path.join(self.output_dir, f"config_{self.timestamp}.json")
         print(f"Saving configuration to {config_filename}...")
         with open(config_filename, 'w') as config_file:
             # Write the configuration to the file
             json.dump(self.config, config_file, indent=4)
 
+
+    
+    def save_adata(self) -> None:
+        """
+        Saves the AnnData object and the configuration to separate files in a subdirectory.
+        The subdirectory is named "output_<timestamp>" and is created in the output directory specified in the configuration.
+        """
+        print(f"Saving AnnData to {adata_filename}...")
+        self.adata.write(adata_filename)
+        
         print("Save complete.")
 
 

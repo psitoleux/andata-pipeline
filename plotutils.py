@@ -6,6 +6,8 @@ import plotly.io as pio
 
 
 
+
+
 def determine_variable_types(df: pd.DataFrame):
     categorical_cols = []
     continuous_cols = []
