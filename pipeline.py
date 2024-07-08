@@ -128,6 +128,7 @@ class Pipeline():
         self.normalization = self._get_normalization_method(self.config.get("normalization"))
 
         # Update feature selection method
+        self.n_top_genes = 1_000 #self.config.get("n_top_genes")
         self.feature_selection = self._get_feature_selection_method(self.config.get("feature_selection"))
 
         # Update dimensionality reduction method
@@ -198,7 +199,7 @@ class Pipeline():
             return None
         elif feature_selection_config == "hvg":
             from modules.featsel import highly_variable_genes
-            return lambda adata, n_top_genes=1800: highly_variable_genes(adata, n_top_genes=n_top_genes)
+            return lambda adata, n_top_genes=self.n_top_genes: highly_variable_genes(adata, n_top_genes=n_top_genes)
         elif feature_selection_config == "pearson":
             return sc.experimental.pp.highly_variable_genes
         elif feature_selection_config == "deviance":
@@ -206,10 +207,10 @@ class Pipeline():
             return deviance
         elif feature_selection_config == "heg":
             from modules.featsel import highly_expressed_genes
-            return lambda adata, n_top_genes=1800: highly_expressed_genes(adata, n_top_genes=n_top_genes)
+            return lambda adata, n_top_genes=self.n_top_genes: highly_expressed_genes(adata, n_top_genes=n_top_genes)
         elif feature_selection_config == "moeg":
             from modules.featsel import most_often_expressed_genes
-            return lambda adata, n_top_genes=1800: most_often_expressed_genes(adata, n_top_genes=n_top_genes)
+            return lambda adata, n_top_genes=self.n_top_genes: most_often_expressed_genes(adata, n_top_genes=n_top_genes)
         else:
             return None
 
@@ -362,22 +363,28 @@ class Pipeline():
     def visualize(self, n_dim = 2) -> None:
         from plots import scatter3D, pca3D
         
+        if not ('neighbors' in self.adata.uns):
+            sc.pp.neighbors(self.adata)
+         
         self.visualization(self.adata, n_dim)            
-
-        if n_dim == 2: 
             
-            print('outputting pca plot...') 
-            fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
+        print('outputting pca plot...') 
+        fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
+        self.save_mpl(fig_pca)
+         
+        X_ = np.array([self.adata.obsm['X_umap'][:, 0], self.adata.obsm['X_umap'][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
+        fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = ['UMAP 1', 'UMAP 2', 'PC1'])
+        
+        self.save_plotly(fig_umap_pca, 'umap_pca')
+        
+        fig_pca_3D = pca3D(self.adata, idx = [0, 1, 2])
+        
+        self.save_plotly(fig_pca_3D, 'pca3d')    
+        
+        #if n_dim == 3:
             
-            X_ = np.array([self.adata.obsm['X_umap'][:, 0], self.adata.obsm['X_umap'][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
-            fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = ['UMAP 1', 'UMAP 2', 'PC1'])
-            
-            self.save_plotly(fig_umap_pca, 'umap_pca')
-            
-        if n_dim == 3:
-            
-            pca3D(self.adata)
-            scatter3D(self.adata.obsm['X_umap'], colors = self.adata.obs, title='UMAP')
+        #    pca3D(self.adata)
+        #    scatter3D(self.adata.obsm['X_umap'], colors = self.adata.obs, title='UMAP')
 
         return None
     
@@ -385,20 +392,25 @@ class Pipeline():
         
         from plots import set_matplotlib_style
         
+        print('setting matplotlib style...')
         set_matplotlib_style()
         
-       
+        print('excluding cycle genes...')
         cycle_genes = self._get_cycle_genes()
         high_var_no_cycle_idx = (self.adata.var['highly_variable'] != (self.adata.var['highly_variable'] 
                                                         & self.adata.var['GeneName'].isin(cycle_genes))) 
         
+        
         relevant_genes = self.adata.var['GeneName'][high_var_no_cycle_idx]
         
+        print('getting dense array...')
         A = self.adata[:, high_var_no_cycle_idx].X.toarray()
         
+        print('computing correlations, covariances...')
         correlations = np.corrcoef(A, rowvar=False)
         covariances = np.cov(A, rowvar=False)
         
+        print('inverting covariance to get coupling...')
         coupling_matrix = np.linalg.pinv(covariances)
         
         import rpy2.robjects.numpy2ri
@@ -443,7 +455,7 @@ class Pipeline():
             
             fig = heatmap_with_annotations(log1p(covariances_ordered), labels_cov)
         
-        
+        print('plotting variance ratio...')
         fig, ax = plt.subplots(figsize=(16, 9))
         
         var_ratio = self.adata.uns['pca']['variance_ratio']
@@ -515,12 +527,7 @@ class Pipeline():
                 ax.plot(data[:, indices[i, 0]]
                         ,data[:, indices[i, 1]], 'o', markersize=2, alpha = alpha,
                         label = genex + ' - ' + geney,
-                        color = 'C' + str(i % 10))
-                
-
-
-
-                
+                        color = 'C' + str(i % 10)) 
  
                 ax.set_title('share both zeros ' + '{0:.4f}'.format(share_both_zeros) 
                              + ' \n  nb both non-zeros ' + str(nb_non_zeros_both) 
@@ -534,11 +541,8 @@ class Pipeline():
             plt.tight_layout()
 
             return fig
-            
-
         
-
-
+        print('plotting joints...')
 
         self.save_mpl(
             plot_top_k_joints(A, coupling_matrix, relevant_genes, title='coupling-matrix')
@@ -567,7 +571,7 @@ class Pipeline():
         def random_offdiag_idx(N, k):
             
             indices = [(i,j) for i in range(N) for j in range(i+1, N)]
-            iidx = np.random.choice(len(indices), size=k, replace=False)
+            iidx = np.random.choice(len(indices), size=k, replace=False).astype(int)
             
             return indices[iidx]
             
@@ -586,9 +590,12 @@ class Pipeline():
         
         return None
     
-    def save_mpl(self, fig : plt.Figure, format : str = 'png') -> None:
+    def save_mpl(self, fig : plt.Figure, format : str = 'png', title : str = None) -> None:
         
-        fig.savefig(self.figures_dir + '/' + fig.get_suptitle() + '.' + format
+        if title is None:
+            title = fig.get_suptitle()
+        
+        fig.savefig(self.figures_dir + '/' + title + '.' + format
                     , bbox_inches='tight'
                     ,format = format
                     , dpi = 600
@@ -610,8 +617,6 @@ class Pipeline():
             # Write the configuration to the file
             json.dump(self.config, config_file, indent=4)
 
-
-    
     def save_adata(self) -> None:
         """
         Saves the AnnData object and the configuration to separate files in a subdirectory.
@@ -621,5 +626,3 @@ class Pipeline():
         self.adata.write(adata_filename)
         
         print("Save complete.")
-
-

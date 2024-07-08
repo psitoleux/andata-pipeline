@@ -9,6 +9,26 @@ import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 
 
+def get_topk_indices(X : np.array, k : int) -> np.array:
+    
+    
+    return np.argsort(X)[-k:][::-1]
+
+def set_var_key(adata : sc.AnnData, key : str, value : np.array) -> sc.AnnData:
+    
+    adata.var[key] = value
+    
+    return adata
+
+def get_boolean_array_from_idx(k : int, idx : np.array) -> np.array:
+    
+    bool_arr = np.zeros(k, dtype = bool)
+    
+    bool_arr[idx] = True
+    
+    return bool_arr
+    
+
 def highly_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
     
     n_counts_per_gene = adata.X.sum(0)
@@ -38,7 +58,7 @@ def most_often_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> 
     
     adata.var['highly_variable'] = hv_genes_bool
 
-    
+    print('most often expressed genes selected')    
     return adata
 
 def highly_variable_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:

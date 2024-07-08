@@ -13,11 +13,15 @@ from plotutils import *
 def set_matplotlib_style():
     plt.style.use("ggplot")
     
-    colors = ['#332288', '#117733', '#44AA99', '#88CCEE'
-              , '#DDCC77', '#CC6677', '#AA4499', '#882255']
+    colors = get_tol()
 
     matplotlib.rcParams['axes.prop_cycle'] = matplotlib.cycler(
         color= colors)
+
+def get_tol():
+    
+    return ['#332288', '#117733', '#44AA99', '#88CCEE'
+              , '#DDCC77', '#CC6677', '#AA4499', '#882255']
 
 def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotlib.figure.Figure:
     """
@@ -113,7 +117,7 @@ def scatter2D(x: np.ndarray
     color_options = create_color_options(colors, categorical_cols, continuous_cols)
 
     # Generate color palette for categorical variable
-    category_colors = px.colors.qualitative.Set1
+    category_colors = get_tol()
 
     # Extract x, y coordinates
     df = extract_coordinates(x, colors, idx, dim = 2)
@@ -173,7 +177,7 @@ def scatter3D(x: np.ndarray
     color_options = create_color_options(colors, categorical_cols, continuous_cols)
 
     # Generate color palette for categorical variable
-    category_colors = px.colors.qualitative.Set1
+    category_colors = get_tol()
 
     # Extract x, y, z coordinates
     
