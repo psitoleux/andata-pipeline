@@ -6,6 +6,7 @@
 # Output/saved dir
 
 output/
+out/
 
 
 # Byte-compiled / optimized / DLL files
