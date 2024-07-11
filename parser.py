@@ -24,15 +24,17 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--normalization", type=str, help="normalization", default="log1p")
     parser.add_argument("--feature_selection", type=str, help="feature_selection", default="hvg")
     parser.add_argument("--ambient", type=str, help="ambient", default=None)
-    parser.add_argument("--doublets", type=str, help="doublets", default=None)
     
-    parser.add_argument("--dim_reduction", type=str, help="dim_reduction", default="pca")
+    parser.add_argument("--doublets", type=str, help="doublets", default=None)
+    parser.add_argument("--filter_dbl", action=argparse.BooleanOptionalAction)
+    
+    parser.add_argument("--dim_red", type=str, help="dim_reduction", default="pca")
     parser.add_argument("--pca_n_comps", type=int, help="pca_n_comps", default=50)
     
     parser.add_argument("--batch_corr", type=str, help="batch_corr", default=None)
     parser.add_argument("--batch_key", type=str, help="batch_key", default="method")
     
-    parser.add_argument("--visualization", type=str, help="visualization", default="umap")
+    parser.add_argument("--viz", type=str, help="visualization", default="umap")
 
     
     return parser

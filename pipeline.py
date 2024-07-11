@@ -50,7 +50,7 @@ class Pipeline():
         
         self._save = config.get("save")
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_dir = config.get("output") + '/' + self.timestamp + '/'
+        self.output_dir = config.get("output")  + self.timestamp + '/'
 
         self.figures_dir = self.output_dir + 'figures/'
      
@@ -110,6 +110,7 @@ class Pipeline():
         
         # Update timestamp (to have distsinct filenames)
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
+        self.seed = self.config.get("seed")
         
         # Update outlier keys
         self.outlier_keys = self.config.get("outlier_keys")
@@ -123,6 +124,7 @@ class Pipeline():
 
         # Update doublets method
         self.doublets = self._get_doublets_method(self.config.get("doublets"))
+        self.filter_doublets = self.config.get("filter_dbl")
 
         # Update normalization method
         self.normalization = self._get_normalization_method(self.config.get("normalization"))
@@ -132,13 +134,13 @@ class Pipeline():
         self.feature_selection = self._get_feature_selection_method(self.config.get("feature_selection"))
 
         # Update dimensionality reduction method
-        self.dim_reduction = self._get_dim_reduction_method(self.config.get("dim_reduction"))
+        self.dim_reduction = self._get_dim_reduction_method(self.config.get("dim_red"))
 
         # Update batch correction method
         self.batch_corr = self._get_batch_corr_method(self.config.get("batch_corr"))
 
         # Update visualization method
-        self.visualization = self._get_visualization_method(self.config.get("visualization"))
+        self.visualization = self._get_visualization_method(self.config.get("viz"))
 
         # TODO correct ordering of steps ?
         self.steps = [self.ambient, self.doublets, self.normalization, self.feature_selection,
@@ -173,7 +175,7 @@ class Pipeline():
             return None
         elif doublets_config == "scdbl":
             from modules.doublet import scdbl
-            return scdbl
+            return lambda adata: scdbl(adata=adata, filter = self.filter_doublets, seed=self.seed)
         else:
             return None
 
@@ -186,8 +188,11 @@ class Pipeline():
         elif normalization_config == "plog1p":
             from modules.norm import pure_log1p
             return pure_log1p
-        elif normalization_config == "pearson_residuals":
-            return sc.experimental.pp.normalize_pearson_residuals
+        elif normalization_config == "pearson":
+            def pearson_residuals(adata):
+                sc.experimental.pp.recipe_pearson_residuals(adata, random_state=self.seed, inplace=True)
+                return adata
+            return pearson_residuals
         elif normalization_config == "sanity":
             from modules.norm import sanity_normalization
             return sanity_normalization
@@ -200,8 +205,6 @@ class Pipeline():
         elif feature_selection_config == "hvg":
             from modules.featsel import highly_variable_genes
             return lambda adata, n_top_genes=self.n_top_genes: highly_variable_genes(adata, n_top_genes=n_top_genes)
-        elif feature_selection_config == "pearson":
-            return sc.experimental.pp.highly_variable_genes
         elif feature_selection_config == "deviance":
             from modules.featsel import deviance
             return deviance
@@ -243,6 +246,8 @@ class Pipeline():
         elif visualization_config == "umap":
             return lambda adata, n_comp=2: sc.tl.umap(adata, n_components=n_comp)
         # TODO PacMap 
+        elif visualization_config == "trimap":
+            return lambda adata, n_comp=2: sc.tl.trimap(adata, n_components=n_comp)
         else:
             return None
         
@@ -340,9 +345,12 @@ class Pipeline():
         if self.feature_selection is not None:
             self.adata = self.feature_selection(self.adata) 
         
-        for step in [self.dim_reduction, self.batch_corr]:
-            if step is not None:
-                step(self.adata)
+        if self.dim_reduction is not None:
+            print('running dim reduction...')
+            self.dim_reduction(self.adata)
+            
+        if self.batch_corr is not None:
+            self.batch_corr(self.adata)
                 
                 
         
@@ -363,17 +371,17 @@ class Pipeline():
     def visualize(self, n_dim = 2) -> None:
         from plots import scatter3D, pca3D
         
-        if not ('neighbors' in self.adata.uns):
+        if not ('neighbors' in self.adata.uns.columns):
             sc.pp.neighbors(self.adata)
          
-        self.visualization(self.adata, n_dim)            
-            
+        self.visualization(self.adata, n_dim)
         print('outputting pca plot...') 
         fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
         self.save_mpl(fig_pca)
-         
-        X_ = np.array([self.adata.obsm['X_umap'][:, 0], self.adata.obsm['X_umap'][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
-        fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = ['UMAP 1', 'UMAP 2', 'PC1'])
+        
+        viz_method = self.config.get('visualization')
+        X_ = np.array([self.adata.obsm['X_' + viz_method][:, 0], self.adata.obsm['X_' + viz_method][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
+        fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = [viz_method + ' 1', viz_method + ' 2',  'PC1'])
         
         self.save_plotly(fig_umap_pca, 'umap_pca')
         
@@ -406,12 +414,13 @@ class Pipeline():
         print('getting dense array...')
         A = self.adata[:, high_var_no_cycle_idx].X.toarray()
         
-        print('computing correlations, covariances...')
+        print('computing correlations...')
         correlations = np.corrcoef(A, rowvar=False)
+        print('computing covariances...')
         covariances = np.cov(A, rowvar=False)
         
         print('inverting covariance to get coupling...')
-        coupling_matrix = np.linalg.pinv(covariances)
+        coupling_matrix = np.linalg.pinv(covariances, )
         
         import rpy2.robjects.numpy2ri
         from rpy2.robjects.packages import importr
@@ -458,9 +467,20 @@ class Pipeline():
         print('plotting variance ratio...')
         fig, ax = plt.subplots(figsize=(16, 9))
         
+        twin = ax.twinx()
+        
         var_ratio = self.adata.uns['pca']['variance_ratio']
         n_coms = len(var_ratio)
-        plt.plot(range(1, n_coms + 1), var_ratio, 'o-')
+        ax.plot(range(1, n_coms + 1), var_ratio, 'o-', label='Variance Ratio')
+        
+        twin.plot(range(1, n_coms + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio')
+        
+        ax.set_ylabel('Variance Ratio')
+        twin.set_ylabel('Cumulative Variance Ratio')
+        
+        ax.set_xlabel('Number of Components')
+        
+        self.save_mpl(fig, title = 'variance_ratio')
         
         def top_k_off_diagonal_indices_symmetric(matrix, k):
             # Ensure the matrix is square
@@ -590,10 +610,12 @@ class Pipeline():
         
         return None
     
-    def save_mpl(self, fig : plt.Figure, format : str = 'png', title : str = None) -> None:
+    def save_mpl(self, fig : plt.Figure, format : str = 'png', title : str = '') -> None:
         
-        if title is None:
-            title = fig.get_suptitle()
+        if title == '':
+            title = 'plot' + datetime.now().strftime("%Y%m%d-%H%M%S")
+        
+        title = title + fig.get_suptitle()
         
         fig.savefig(self.figures_dir + '/' + title + '.' + format
                     , bbox_inches='tight'

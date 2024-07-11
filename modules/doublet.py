@@ -4,7 +4,7 @@ import rpy2.robjects as ro
 import numpy as np
 import scipy.sparse as sp
 
-def scdbl(adata: sc.AnnData, seed: int = 123) -> sc.AnnData:
+def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnData:
     """
     Run scDblFinder on the input AnnData object.
 
@@ -87,6 +87,7 @@ def scdbl(adata: sc.AnnData, seed: int = 123) -> sc.AnnData:
     print(adata.obs["scDblFinder_class"].value_counts())
     
     # Return the AnnData object with singlet cells
-    adata_singlet = adata[adata.obs['scDblFinder_class'] == 'singlet'].copy()
-    
-    return adata_singlet
+    if filter:
+        adata = adata[adata.obs['scDblFinder_class'] == 'singlet'].copy()
+
+    return adata 
