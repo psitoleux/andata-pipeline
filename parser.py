@@ -22,7 +22,11 @@ def get_parser() -> ArgumentParser:
     
      
     parser.add_argument("--normalization", type=str, help="normalization", default="log1p")
+    
+    
     parser.add_argument("--feature_selection", type=str, help="feature_selection", default="hvg")
+    parser.add_argument("--n_top_genes", type=int, help="n_top_genes", default=2000)
+    
     parser.add_argument("--ambient", type=str, help="ambient", default=None)
     
     parser.add_argument("--doublets", type=str, help="doublets", default=None)

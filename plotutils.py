@@ -144,3 +144,35 @@ def add_traces(fig: go.Figure, df: pd.DataFrame, color_options: dict, category_c
                     )
     return fig
 
+
+def random_offdiag_idx(N, k):
+    
+    indices = [(i,j) for i in range(N) for j in range(i+1, N)]
+    indices = np.array(indices)
+    iidx = np.random.choice(len(indices), size=k, replace=False).astype(int)
+    
+    return indices[iidx]
+    
+
+def top_k_off_diagonal_indices_symmetric(matrix, k):
+    # Ensure the matrix is square
+    assert matrix.shape[0] == matrix.shape[1], "The input matrix must be square."
+    
+    n = matrix.shape[0]
+    
+    # Create a mask for the upper triangular off-diagonal elements
+    mask = np.triu(np.ones((n, n), dtype=bool), k=1)
+    
+    # Extract the upper triangular off-diagonal elements
+    off_diagonal_elements = matrix[mask]
+    
+    # Get the indices of the sorted elements in descending order
+    sorted_indices = np.argsort(off_diagonal_elements)[::-1]
+    
+    # Select the top k indices
+    top_k_indices_flat = sorted_indices[:k]
+    
+    # Convert flat indices back to 2D indices
+    top_k_indices = np.vstack(np.unravel_index(np.where(mask.flatten())[0][top_k_indices_flat], (n, n))).T
+    
+    return top_k_indices

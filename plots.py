@@ -255,3 +255,69 @@ def heatmap_with_annotations(matrix: np.ndarray, labels: list):
     fig.show()
     
     return fig
+
+def plot_top_k_joints(data : np.ndarray, matrix : np.ndarray, genes
+                        , title : str = ''
+                        , k :int = 9):
+    
+    top_k_indices = top_k_off_diagonal_indices_symmetric(matrix, k)
+    
+    return plot_k_joints(data, matrix, genes, top_k_indices, title, k)
+    
+    
+def plot_k_joints(data : np.ndarray
+                    , matrix : np.ndarray
+                    , genes : pd.Series
+                    , indices : np.ndarray
+                    , title : str = ''
+                    , k : int = 9):
+        
+    
+    l = int(np.sqrt(k))
+    
+
+    fig, axs = plt.subplots(l, l, figsize=(l*4, l*4))
+
+    for i,ax in zip(range(k), axs.flat):
+        
+        genex, geney = genes.iloc[indices[i, 0]], genes.iloc[indices[i, 1]]
+
+
+        share_both_zeros = np.sum((data[:, indices[i, 0]] == 0) & (data[:, indices[i, 1]] == 0)) / data.shape[0]
+        nb_non_zeros_both = np.sum((data[:, indices[i, 0]] != 0) & (data[:, indices[i, 1]] != 0)) 
+        nb_non_zeros_x = np.sum(data[:, indices[i, 0]] != 0) 
+        nb_non_zeros_y = np.sum(data[:, indices[i, 1]] != 0)
+        
+        alpha = 0.5
+        if nb_non_zeros_both > 1000:
+            alpha = 0.1
+        if nb_non_zeros_both > 10000:
+            alpha = 0.01
+        
+        
+        ax.plot(data[:, indices[i, 0]]
+                ,data[:, indices[i, 1]], 'o', markersize=2, alpha = alpha,
+                label = genex + ' - ' + geney,
+                color = 'C' + str(i % 10)) 
+
+        ax.set_title('share both zeros ' + '{0:.4f}'.format(share_both_zeros) 
+                        + ' \n  nb both non-zeros ' + str(nb_non_zeros_both) 
+                        + ' \n matrix value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]]))
+        ax.set_xlabel(genex + ' - ' + str(nb_non_zeros_x) + ' non-zeros' )
+        ax.set_ylabel(geney + ' - ' + str(nb_non_zeros_y) + ' non zeros' )
+        
+        ax.set_aspect('equal')
+        
+    fig.suptitle(title) 
+    plt.tight_layout()
+
+    return fig
+
+
+def plot_k_random_joints(data : np.ndarray, matrix : np.ndarray, genes, k = 9):
+        
+    indices = random_offdiag_idx(data.shape[1], k)
+        
+    return plot_k_joints(data, matrix, genes, indices, title = 'random-pairs', k = k)
+
+

@@ -130,7 +130,7 @@ class Pipeline():
         self.normalization = self._get_normalization_method(self.config.get("normalization"))
 
         # Update feature selection method
-        self.n_top_genes = 1_000 #self.config.get("n_top_genes")
+        self.n_top_genes = self.config.get("n_top_genes")
         self.feature_selection = self._get_feature_selection_method(self.config.get("feature_selection"))
 
         # Update dimensionality reduction method
@@ -190,7 +190,7 @@ class Pipeline():
             return pure_log1p
         elif normalization_config == "pearson":
             def pearson_residuals(adata):
-                sc.experimental.pp.recipe_pearson_residuals(adata, random_state=self.seed, inplace=True)
+                sc.experimental.pp.recipe_pearson_residuals(adata, random_state=self.seed, inplace=True, n_top_genes=self.n_top_genes)
                 return adata
             return pearson_residuals
         elif normalization_config == "sanity":
@@ -244,10 +244,10 @@ class Pipeline():
         if visualization_config is None:
             return None
         elif visualization_config == "umap":
-            return lambda adata, n_comp=2: sc.tl.umap(adata, n_components=n_comp)
-        # TODO PacMap 
+            return lambda adata, n_comp=2: sc.tl.umap(adata, n_components=n_comp, random_state=self.seed)
+        # TODO PacMap ??
         elif visualization_config == "trimap":
-            return lambda adata, n_comp=2: sc.tl.trimap(adata, n_components=n_comp)
+            return lambda adata, n_comp=2: sc.external.tl.trimap(adata, n_components=n_comp, metric = "cosine")
         else:
             return None
         
@@ -276,10 +276,7 @@ class Pipeline():
             pickle.dump(tosave, f)
             
         return None
-    
-    
-            
-    
+           
     def outliers(self) -> None:
         
         sc.pp.calculate_qc_metrics(self.adata, qc_vars=self.outlier_keys, inplace=True, percent_top=[20], log1p=True)
@@ -371,7 +368,7 @@ class Pipeline():
     def visualize(self, n_dim = 2) -> None:
         from plots import scatter3D, pca3D
         
-        if not ('neighbors' in self.adata.uns.columns):
+        if not ('neighbors' in self.adata.uns.keys()):
             sc.pp.neighbors(self.adata)
          
         self.visualization(self.adata, n_dim)
@@ -379,11 +376,11 @@ class Pipeline():
         fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
         self.save_mpl(fig_pca)
         
-        viz_method = self.config.get('visualization')
+        viz_method = self.config.get('viz')
         X_ = np.array([self.adata.obsm['X_' + viz_method][:, 0], self.adata.obsm['X_' + viz_method][:, 1], self.adata.obsm['X_pca'][:, 0]]).T
-        fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title='UMAP & PC1', labels = [viz_method + ' 1', viz_method + ' 2',  'PC1'])
+        fig_umap_pca = scatter3D(X_, colors = self.adata.obs, title= viz_method + ' & PC1', labels = [viz_method + ' 1', viz_method + ' 2',  'PC1'])
         
-        self.save_plotly(fig_umap_pca, 'umap_pca')
+        self.save_plotly(fig_umap_pca, viz_method + '_pca')
         
         fig_pca_3D = pca3D(self.adata, idx = [0, 1, 2])
         
@@ -430,22 +427,7 @@ class Pipeline():
         # Import R package seriation
         seriation = importr('seriation')
         
-        def reorder_labels_and_matrix(matrix, labels):
-            # Convert Python numpy matrix to R matrix
-            r_matrix = rpy2.robjects.r.matrix(matrix, nrow=matrix.shape[0], ncol=matrix.shape[1])
-            
-            # Call seriate function from seriation package
-            ordered_indices = seriation.seriate(r_matrix, method = 'PCA')
-            
-            # Convert R indices back to Python + making sure they have the right shape
-            ordered_indices = (np.array(ordered_indices)-1).flatten() 
-
-            # Convert ordered indices back to Python
-            ordered_matrix = matrix[np.ix_(ordered_indices, ordered_indices)]
-            ordered_labels = [labels[i] for i in ordered_indices]
-
-            return ordered_matrix, ordered_labels
-        
+        from utils import reorder_labels_and_matrix
         if False: 
             from plots import heatmap_with_annotations
             
@@ -471,97 +453,26 @@ class Pipeline():
         
         var_ratio = self.adata.uns['pca']['variance_ratio']
         n_coms = len(var_ratio)
-        ax.plot(range(1, n_coms + 1), var_ratio, 'o-', label='Variance Ratio')
+        left_plot = ax.plot(range(1, n_coms + 1), var_ratio, 'o-', label='Variance Ratio')
         
-        twin.plot(range(1, n_coms + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio')
+        right_plot = twin.plot(range(1, n_coms + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio', color = 'C4')
         
         ax.set_ylabel('Variance Ratio')
         twin.set_ylabel('Cumulative Variance Ratio')
         
         ax.set_xlabel('Number of Components')
         
+        ax.yaxis.label.set_color(left_plot[0].get_color())
+        twin.yaxis.label.set_color(right_plot[0].get_color())
+        
+        ax.tick_params(axis='y', colors=left_plot[0].get_color())
+        twin.tick_params(axis='y', colors=right_plot[0].get_color())
+        
+        ax.spines["right"].set_edgecolor(right_plot[0].get_color())
+        
         self.save_mpl(fig, title = 'variance_ratio')
         
-        def top_k_off_diagonal_indices_symmetric(matrix, k):
-            # Ensure the matrix is square
-            assert matrix.shape[0] == matrix.shape[1], "The input matrix must be square."
-            
-            n = matrix.shape[0]
-            
-            # Create a mask for the upper triangular off-diagonal elements
-            mask = np.triu(np.ones((n, n), dtype=bool), k=1)
-            
-            # Extract the upper triangular off-diagonal elements
-            off_diagonal_elements = matrix[mask]
-            
-            # Get the indices of the sorted elements in descending order
-            sorted_indices = np.argsort(off_diagonal_elements)[::-1]
-            
-            # Select the top k indices
-            top_k_indices_flat = sorted_indices[:k]
-            
-            # Convert flat indices back to 2D indices
-            top_k_indices = np.vstack(np.unravel_index(np.where(mask.flatten())[0][top_k_indices_flat], (n, n))).T
-            
-            return top_k_indices
-        
-        def plot_top_k_joints(data : np.ndarray, matrix : np.ndarray, genes
-                              , title : str = ''
-                              , k :int = 9):
-            
-            top_k_indices = top_k_off_diagonal_indices_symmetric(matrix, k)
-            
-            return plot_k_joints(data, matrix, genes, top_k_indices, title, k)
-            
-         
-        def plot_k_joints(data : np.ndarray
-                          , matrix : np.ndarray
-                          , genes : pd.Series
-                          , indices : np.ndarray
-                          , title : str = ''
-                          , k : int = 9):
-                
-            
-            l = int(np.sqrt(k))
-            
-
-            fig, axs = plt.subplots(l, l, figsize=(l*4, l*4))
-
-            for i,ax in zip(range(k), axs.flat):
-                
-                genex, geney = genes.iloc[indices[i, 0]], genes.iloc[indices[i, 1]]
-
-
-                share_both_zeros = np.sum((data[:, indices[i, 0]] == 0) & (data[:, indices[i, 1]] == 0)) / data.shape[0]
-                nb_non_zeros_both = np.sum((data[:, indices[i, 0]] != 0) & (data[:, indices[i, 1]] != 0)) 
-                nb_non_zeros_x = np.sum(data[:, indices[i, 0]] != 0) 
-                nb_non_zeros_y = np.sum(data[:, indices[i, 1]] != 0)
-                
-                alpha = 0.5
-                if nb_non_zeros_both > 1000:
-                    alpha = 0.1
-                if nb_non_zeros_both > 10000:
-                    alpha = 0.01
-                
-                
-                ax.plot(data[:, indices[i, 0]]
-                        ,data[:, indices[i, 1]], 'o', markersize=2, alpha = alpha,
-                        label = genex + ' - ' + geney,
-                        color = 'C' + str(i % 10)) 
- 
-                ax.set_title('share both zeros ' + '{0:.4f}'.format(share_both_zeros) 
-                             + ' \n  nb both non-zeros ' + str(nb_non_zeros_both) 
-                             + ' \n matrix value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]]))
-                ax.set_xlabel(genex + ' - ' + str(nb_non_zeros_x) + ' non-zeros' )
-                ax.set_ylabel(geney + ' - ' + str(nb_non_zeros_y) + ' non zeros' )
-                
-                ax.set_aspect('equal')
-                
-            fig.suptitle(title) 
-            plt.tight_layout()
-
-            return fig
-        
+        from plots import plot_top_k_joints
         print('plotting joints...')
 
         self.save_mpl(
@@ -588,20 +499,7 @@ class Pipeline():
             plot_top_k_joints(A, -covariances, relevant_genes, title = 'negative-covariances')
         )
         
-        def random_offdiag_idx(N, k):
-            
-            indices = [(i,j) for i in range(N) for j in range(i+1, N)]
-            iidx = np.random.choice(len(indices), size=k, replace=False).astype(int)
-            
-            return indices[iidx]
-            
-            
-        def plot_k_random_joints(data : np.ndarray, matrix : np.ndarray, genes, k = 9):
-                
-            indices = random_offdiag_idx(data.shape[1], k)
-                
-            return plot_k_joints(data, matrix, genes, indices, title = 'random-pairs', k = k)
-
+        from plots import plot_k_random_joints
         
         self.save_mpl(
             plot_k_random_joints(A, coupling_matrix, relevant_genes)

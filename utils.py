@@ -33,3 +33,18 @@ def is_outlier(adata: sc.AnnData, metric: str, nmads: int) -> np.ndarray:
     
     return outlier
 
+def reorder_labels_and_matrix(matrix, labels):
+    # Convert Python numpy matrix to R matrix
+    r_matrix = rpy2.robjects.r.matrix(matrix, nrow=matrix.shape[0], ncol=matrix.shape[1])
+    
+    # Call seriate function from seriation package
+    ordered_indices = seriation.seriate(r_matrix, method = 'PCA')
+    
+    # Convert R indices back to Python + making sure they have the right shape
+    ordered_indices = (np.array(ordered_indices)-1).flatten() 
+
+    # Convert ordered indices back to Python
+    ordered_matrix = matrix[np.ix_(ordered_indices, ordered_indices)]
+    ordered_labels = [labels[i] for i in ordered_indices]
+
+    return ordered_matrix, ordered_labels

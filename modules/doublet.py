@@ -4,7 +4,7 @@ import rpy2.robjects as ro
 import numpy as np
 import scipy.sparse as sp
 
-def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnData:
+def scdbl(adata: sc.AnnData, batch_key: str = "", filter : bool = True, seed: int = 123) -> sc.AnnData:
     """
     Run scDblFinder on the input AnnData object.
 
@@ -16,7 +16,7 @@ def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnDat
         AnnData: AnnData object with singlet cells stored in the 'adata_singlet' object.
     
     Remark:
-        Takes around 15 minutes to run Parks et al. (2020) (zenodo.org/records/5500511)
+        Takes around 10 minutes to run Parks et al. (2020) (zenodo.org/records/5500511)
         thymic development dataset (~250k cells x ~30k genes).
         On an Apple M3 Pro 12 cores 36 GB RAM.
     """
@@ -25,6 +25,32 @@ def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnDat
     scDblFinder = importr("scDblFinder")
     SingleCellExperiment = importr("SingleCellExperiment")
     Matrix = importr("Matrix")
+    
+     
+    if batch_key == "":
+        doublet_score, doublet_class = scdbl_call(adata, sample_tag=np.zeros(adata.shape[0]), seed = seed)
+    else:
+        batch_ids = adata.obs[batch_key]
+        batch_ids = batch_ids.replace(batch_ids.unique(), np.arange(len(batch_ids.unique()))).to_numpy().astype(int)
+        
+        doublet_score, doublet_class = scdbl_subset(adata, sample_tag=batch_ids, seed = seed)
+        
+        
+    # Store the results in the AnnData object
+    adata.obs["scDblFinder_score"] = doublet_score
+    adata.obs["scDblFinder_class"] = doublet_class
+    
+    # Print the counts of singlet and doublet cells
+    print(adata.obs["scDblFinder_class"].value_counts())
+    
+    # Return the AnnData object with singlet cells
+    if filter:
+        adata = adata[adata.obs['scDblFinder_class'] == 'singlet'].copy()
+
+    return adata 
+
+
+def scdbl_call(adata : sc.AnnData, sample_tag : np.array, seed : int = 123 ) -> sc.AnnData:
     
     # Prepare the data matrix
     data_mat = adata.X.T  # Transpose the matrix
@@ -41,6 +67,7 @@ def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnDat
         ro.globalenv["nrow"] = data_mat.shape[0]
         ro.globalenv["ncol"] = data_mat.shape[1]
         ro.globalenv["seed"] = seed
+        ro.globalenv["sample_tag"] = ro.IntVector(sample_tag + 1)
 
     else:
         raise ValueError("The input matrix is not sparse")
@@ -66,7 +93,8 @@ def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnDat
         # Run scDblFinder
         sce <- scDblFinder(
             SingleCellExperiment(
-                list(counts = sparse_mat)
+                assays = list(counts = sparse_mat),
+                colData = DataFrame(sample_tag)
             )
         )
         
@@ -78,16 +106,6 @@ def scdbl(adata: sc.AnnData, filter : bool = True, seed: int = 123) -> sc.AnnDat
     # Retrieve the results
     doublet_score = np.array(ro.globalenv["doublet_score"])
     doublet_class = np.array(ro.globalenv["doublet_class"])
-
-    # Store the results in the AnnData object
-    adata.obs["scDblFinder_score"] = doublet_score
-    adata.obs["scDblFinder_class"] = doublet_class
     
-    # Print the counts of singlet and doublet cells
-    print(adata.obs["scDblFinder_class"].value_counts())
-    
-    # Return the AnnData object with singlet cells
-    if filter:
-        adata = adata[adata.obs['scDblFinder_class'] == 'singlet'].copy()
+    return doublet_score, doublet_class
 
-    return adata 
