@@ -11,6 +11,7 @@ from urllib.request import urlretrieve
 import pickle
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -118,7 +119,24 @@ class Pipeline():
         
         if not self.do_qc:
             print('! Warning: Outliers will not be excluded.')
-
+            
+        self.shuffle = self.config.get("shuffle")
+        
+        self.obs_mask = self.config.get("obs_mask")
+        
+        if bool(self.obs_mask):
+            for key in self.obs_mask:
+                if key not in self.adata.obs.columns:
+                    raise KeyError(f"Key {key} not found in adata.obs.")
+                
+                self.adata = self.adata[self.adata.obs[key].isin(self.obs_mask[key])]
+                
+                
+        if self.shuffle:
+            print("Shuffling data...")
+            np.shuffle(self.adata.X)
+                
+        
         # Update ambient method
         self.ambient = self._get_ambient_method(self.config.get("ambient"))
 
@@ -190,8 +208,20 @@ class Pipeline():
             return pure_log1p
         elif normalization_config == "pearson":
             def pearson_residuals(adata):
-                sc.experimental.pp.recipe_pearson_residuals(adata, random_state=self.seed, inplace=True, n_top_genes=self.n_top_genes)
-                return adata
+                print('applying pearson residuals recipe...')
+                sc.experimental.pp.recipe_pearson_residuals(adata
+                                                            , random_state=self.seed
+                                                            , inplace=True
+                                                            , n_top_genes=self.n_top_genes
+                                                            , theta=self.config.get("pearson_overdis", 100))
+                print('var columns: ', adata.var.columns)
+                #print('doing pearson residual normalization...')
+                from modules.norm import log1p
+                
+                #sc.experimental.pp.normalize_pearson_residuals(adata, inplace=True)
+                
+
+                return log1p(adata) 
             return pearson_residuals
         elif normalization_config == "sanity":
             from modules.norm import sanity_normalization
@@ -340,7 +370,9 @@ class Pipeline():
             self.adata = self.doublets(self.adata)
             
         if self.feature_selection is not None:
-            self.adata = self.feature_selection(self.adata) 
+            self.adata = self.feature_selection(self.adata)
+            print('feature selection complete')
+            
         
         if self.dim_reduction is not None:
             print('running dim reduction...')
@@ -370,10 +402,19 @@ class Pipeline():
         
         if not ('neighbors' in self.adata.uns.keys()):
             sc.pp.neighbors(self.adata)
+            
+        n_genes_axis = self.directions_analysis()
          
         self.visualization(self.adata, n_dim)
         print('outputting pca plot...') 
-        fig_pca = sc.pl.pca(self.adata, color = 'method', annotate_var_explained = True, return_fig = True) # plot 2D pca 
+        
+        pca_color = 'method'
+        
+        if not pca_color in self.adata.obs.columns:
+            pca_color = 'donor'
+        
+        
+        fig_pca = sc.pl.pca(self.adata, color = pca_color, annotate_var_explained = True, return_fig = True) # plot 2D pca 
         self.save_mpl(fig_pca)
         
         viz_method = self.config.get('viz')
@@ -383,8 +424,28 @@ class Pipeline():
         self.save_plotly(fig_umap_pca, viz_method + '_pca')
         
         fig_pca_3D = pca3D(self.adata, idx = [0, 1, 2])
+         
+        scatter_trace = fig_pca_3D.data[0]
         
-        self.save_plotly(fig_pca_3D, 'pca3d')    
+        x, y, z = scatter_trace.x, scatter_trace.y, scatter_trace.z
+        
+        scale_factor = np.max(np.mean(np.abs([x, y, z]), axis = 1))
+        
+        n_genes_axis *= scale_factor
+        
+        fig_pca_3D.add_trace(go.Scatter3d(
+            x = [-n_genes_axis[0], n_genes_axis[0]],
+            y = [-n_genes_axis[1], n_genes_axis[1]],
+            z = [-n_genes_axis[2], n_genes_axis[2]],
+            mode = 'lines',
+            line = dict(color = 'black', width = 2),
+            name = 'n_genes direction'
+        ) )
+        
+        
+        
+        
+        self.save_plotly(fig_pca_3D, 'pca3d')  
         
         #if n_dim == 3:
             
@@ -402,9 +463,11 @@ class Pipeline():
         
         print('excluding cycle genes...')
         cycle_genes = self._get_cycle_genes()
-        high_var_no_cycle_idx = (self.adata.var['highly_variable'] != (self.adata.var['highly_variable'] 
-                                                        & self.adata.var['GeneName'].isin(cycle_genes))) 
-        
+        if 'highly_variable' in self.adata.var.columns:
+            high_var_no_cycle_idx = (self.adata.var['highly_variable'] != (self.adata.var['highly_variable'] 
+                                                            & self.adata.var['GeneName'].isin(cycle_genes))) 
+        else:
+            high_var_no_cycle_idx = list(set(self.adata.var['GeneName']) - set(cycle_genes))
         
         relevant_genes = self.adata.var['GeneName'][high_var_no_cycle_idx]
         
@@ -415,36 +478,36 @@ class Pipeline():
         correlations = np.corrcoef(A, rowvar=False)
         print('computing covariances...')
         covariances = np.cov(A, rowvar=False)
-        
-        print('inverting covariance to get coupling...')
-        coupling_matrix = np.linalg.pinv(covariances, )
-        
-        import rpy2.robjects.numpy2ri
-        from rpy2.robjects.packages import importr
-        
-        rpy2.robjects.numpy2ri.activate()
 
-        # Import R package seriation
-        seriation = importr('seriation')
+        # Setting regularization parameter
+        alpha = self.adata.uns['pca']['variance'][-1] 
+        print('inverting covariance to get coupling...')
+        coupling_matrix = np.linalg.pinv(covariances 
+                                        + alpha * np.eye(covariances.shape[0]), )
+        
         
         from utils import reorder_labels_and_matrix
-        if False: 
-            from plots import heatmap_with_annotations
-            
-            corr_ordered, labels_corr  = reorder_labels_and_matrix(correlations, relevant_genes)
-            
-            fig = heatmap_with_annotations(corr_ordered, labels_corr)
-            
-            coupling_ordered, labels_coupling = reorder_labels_and_matrix(log1p(coupling_matrix), relevant_genes )
-            
-            
-            log1p = lambda x: np.sign(x) * np.log(1+np.abs(x))
-            
-            fig = heatmap_with_annotations((coupling_ordered), labels_coupling)
-            
-            covariances_ordered, labels_cov = reorder_labels_and_matrix(covariances, relevant_genes)
-            
-            fig = heatmap_with_annotations(log1p(covariances_ordered), labels_cov)
+        from plots import heatmap_with_annotations
+        
+        corr_ordered, labels_corr  = reorder_labels_and_matrix(correlations, relevant_genes)
+        
+        fig = heatmap_with_annotations(corr_ordered, labels_corr)
+        
+        self.save_plotly(fig, 'correlation_matrix')
+        
+        log1p = lambda x: np.sign(x) * np.log(1+np.abs(x))
+
+        coupling_ordered, labels_coupling = reorder_labels_and_matrix(log1p(coupling_matrix), relevant_genes )
+        
+        self.save_plotly(fig, 'coupling_matrix')
+        
+        fig = heatmap_with_annotations((coupling_ordered), labels_coupling)
+        
+        covariances_ordered, labels_cov = reorder_labels_and_matrix(covariances, relevant_genes)
+        
+        fig = heatmap_with_annotations(log1p(covariances_ordered), labels_cov)
+        
+        self.save_plotly(fig, 'covariance_matrix')
         
         print('plotting variance ratio...')
         fig, ax = plt.subplots(figsize=(16, 9))
@@ -453,9 +516,9 @@ class Pipeline():
         
         var_ratio = self.adata.uns['pca']['variance_ratio']
         n_coms = len(var_ratio)
-        left_plot = ax.plot(range(1, n_coms + 1), var_ratio, 'o-', label='Variance Ratio')
+        left_plot = ax.plot(range(1, n_coms + 1), var_ratio, 'o-', label='Variance Ratio', color = 'C2')
         
-        right_plot = twin.plot(range(1, n_coms + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio', color = 'C4')
+        right_plot = twin.plot(range(1, n_coms + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio', color = 'C5')
         
         ax.set_ylabel('Variance Ratio')
         twin.set_ylabel('Cumulative Variance Ratio')
@@ -507,6 +570,73 @@ class Pipeline():
 
         
         return None
+    
+    def directions_analysis(self, v = 'n_genes'):
+        from analysis import correlations_along_vector
+        from plots import set_matplotlib_style
+        
+        
+        set_matplotlib_style()
+        
+        if v in self.adata.obs.columns:
+            direction_of_interest = self.adata.obs[v]
+        elif v == 'donor':
+            direction_of_interest = self.adata.obs['donor'].codes
+        elif v == 'method':
+            direction_of_interest = self.adata.obs['method'].codes
+        
+        axis, pearson, spearman = correlations_along_vector(self.adata, direction_of_interest)
+        
+
+        fig, ax = plt.subplots(figsize=(16, 9))
+        
+        pearson_corr, pearson_pval = pearson
+        spearman_corr, spearman_pval = spearman
+        
+        k = len(pearson_corr)
+        
+        twin = ax.twinx()
+        
+        col_left = (235 / 255, 106 / 255, 96/ 255)
+        col_right = (0 / 255, 79 / 255, 115 / 255)
+        left_plot = ax.plot(range(k), (pearson_corr), 'o-', label = 'pearson', color = col_left)
+        right_plot = twin.plot(range(k), np.sqrt(np.cumsum(pearson_corr**2)), 'o-', color = col_right)
+        
+        left_2 = ax.plot(range(k), (spearman_corr), 'd:', label = 'spearman', color = col_left)
+        right_2 = twin.plot(range(k), np.sqrt(np.cumsum(spearman_corr**2)), 'd:', color = col_right)
+        
+        ax.set_ylabel('correlation')
+        twin.set_ylabel('cumulative correlation')
+        
+        ax.set_xlabel('k')
+        ax.legend(facecolor = 'w')
+        
+        ax.yaxis.label.set_color(left_plot[0].get_color())
+        twin.yaxis.label.set_color(right_plot[0].get_color())
+        
+        ax.tick_params(axis='y', colors=left_plot[0].get_color())
+        twin.tick_params(axis='y', colors=right_plot[0].get_color())
+        
+        ax.spines["right"].set_edgecolor(right_plot[0].get_color())
+        
+        plt.legend(facecolor='white')
+        
+        self.save_mpl(fig, title = v + '-directions')
+        
+        fig, ax = plt.subplots(figsize=(16, 9))
+        
+        sns.distplot(pearson_pval, label = 'pearson', color = col_left)
+        sns.distplot(spearman_pval, label = 'spearman', color = col_right)
+        
+        plt.yscale('log') 
+        
+        plt.legend(facecolor = 'w')
+        
+        self.save_mpl(fig, title = v + '-directions-pvals')
+        
+        return axis
+        
+        
     
     def save_mpl(self, fig : plt.Figure, format : str = 'png', title : str = '') -> None:
         

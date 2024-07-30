@@ -1,6 +1,7 @@
 import numpy as np 
 from scipy.stats import median_abs_deviation as mad
 import scanpy as sc
+import rpy2
 
 
 def is_outlier(adata: sc.AnnData, metric: str, nmads: int) -> np.ndarray:
@@ -34,14 +35,24 @@ def is_outlier(adata: sc.AnnData, metric: str, nmads: int) -> np.ndarray:
     return outlier
 
 def reorder_labels_and_matrix(matrix, labels):
+    
+    import rpy2.robjects.numpy2ri
+    from rpy2.robjects.packages import importr
+        
+    rpy2.robjects.numpy2ri.activate()
+
+    # Import R package seriation
+    seriation = importr('seriation')
+
+
     # Convert Python numpy matrix to R matrix
     r_matrix = rpy2.robjects.r.matrix(matrix, nrow=matrix.shape[0], ncol=matrix.shape[1])
     
     # Call seriate function from seriation package
-    ordered_indices = seriation.seriate(r_matrix, method = 'PCA')
-    
+    ordered_indices = seriation.seriate(r_matrix, method = 'PCA_angle')
+    print(ordered_indices[1])
     # Convert R indices back to Python + making sure they have the right shape
-    ordered_indices = (np.array(ordered_indices)-1).flatten() 
+    ordered_indices = (np.array(ordered_indices[1])-1).flatten() 
 
     # Convert ordered indices back to Python
     ordered_matrix = matrix[np.ix_(ordered_indices, ordered_indices)]

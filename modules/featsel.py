@@ -31,34 +31,28 @@ def get_boolean_array_from_idx(k : int, idx : np.array) -> np.array:
 
 def highly_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
     
-    n_counts_per_gene = adata.X.sum(0)
+    n_counts_per_gene = adata.X.sum(0).A1
+    n_counts_sorted = np.sort(n_counts_per_gene)
     
-    top_indices =np.argsort(n_counts_per_gene)[-n_top_genes:][::-1]
+    cutoff = n_counts_sorted[-n_top_genes]
     
-    hv_genes_bool = np.zeros(adata.X.shape[1], dtype = bool)
+    sc.pp.filter_genes(adata,  min_counts = cutoff)
 
-    hv_genes_bool[top_indices] = True
-    
-    adata.var['highly_variable'] = hv_genes_bool
-
+    print('highly expressed genes selected')
     
     return adata
 
 def most_often_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
     
-    nb_cells_nonzero_per_gene = (adata.X > 0).sum(0)
+    nb_cells_nonzero_per_gene = (adata.X > 0).sum(0).A1
+    nb_cells_nonzero_sorted = np.sort(nb_cells_nonzero_per_gene)
     
-    print(nb_cells_nonzero_per_gene.shape)
+    cutoff = nb_cells_nonzero_sorted[-n_top_genes]
     
-    top_indices = np.argsort(nb_cells_nonzero_per_gene)[-n_top_genes:][::-1]
+    sc.pp.filter_genes(adata,  min_cells = cutoff)
     
-    hv_genes_bool = np.zeros(adata.X.shape[1], dtype = bool)
-
-    hv_genes_bool[top_indices] = True
+    print('most often expressed genes selected')
     
-    adata.var['highly_variable'] = hv_genes_bool
-
-    print('most often expressed genes selected')    
     return adata
 
 def highly_variable_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
