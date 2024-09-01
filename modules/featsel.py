@@ -55,10 +55,10 @@ def most_often_expressed_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> 
     
     return adata
 
-def highly_variable_genes(adata : sc.AnnData, n_top_genes : int = 1800) -> sc.AnnData:
+def highly_variable_genes(adata : sc.AnnData, n_top_genes : int = 1800, flavor : str = 'seurat') -> sc.AnnData:
     sc.pp.highly_variable_genes(adata, inplace = True) 
     
-    return adata 
+    return adata[:, adata.var['highly_variable']].copy()
 
 def deviance(adata : sc.AnnData, raw : sc.AnnData, n_genes : int = 4_000, ) -> sc.AnnData:
     

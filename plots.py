@@ -23,7 +23,9 @@ def get_tol():
     return ['#332288', '#117733', '#44AA99', '#88CCEE'
               , '#DDCC77', '#CC6677', '#AA4499', '#882255']
 
-def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotlib.figure.Figure:
+def joint_distribution(gene_i: str, gene_j: str
+                       , adata: sc.AnnData, show_nonzero_counts: bool = True
+                       , color = 'k') -> matplotlib.figure.Figure:
     """
     Plot the joint distribution of two genes.
 
@@ -35,6 +37,8 @@ def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotli
         The name of the second gene.
     adata : AnnData
         The annotated data object.
+    show_nonzero_counts : bool
+        Whether to show the number of non-zero counts in the labels (default: True)
 
     Returns
     -------
@@ -45,24 +49,36 @@ def joint_distribution(gene_i: str, gene_j: str, adata: sc.AnnData) -> matplotli
     gidx1, gidx2 = adata.var_names.get_loc(gene_i), adata.var_names.get_loc(gene_j)
     
     # Create a figure with a 16x16 inch size
-    fig, ax = plt.subplots(figsize=(16, 16))
+    fig, ax = plt.subplots(figsize=(4.5, 4.5))
     
     # Extract the expression values of the genes as numpy arrays
-    exp1, exp2 = adata.X[:, gidx1].A1, adata.X[:, gidx2].A1
+    exp1, exp2 = adata.X[:, gidx1].todense(), adata.X[:, gidx2].todense()
     
-    # Plot the scatter plot of the expression values
-    plt.scatter(exp1, exp2, c='k', s=1, alpha=0.5)
+    print('debug.....', exp1.shape, exp2.shape)
     
+    
+    ax.plot(exp1,exp2, 'o', markersize=2, alpha = 0.01,
+                label = gene_i + ' - ' + gene_j,
+                color = color) 
+ 
     # Add labels to the x and y axes
-    plt.xlabel(gene_i + ' (non-zero counts ' + str(np.sum(exp1 != 0) / adata.X.shape[0]) + ')')
-    plt.ylabel(gene_j + ' (non-zero counts ' + str(np.sum(exp2 != 0) / adata.X.shape[0]) + ')')
+    if show_nonzero_counts:
+        plt.xlabel(gene_i + ' (non-zero counts ' + str(np.sum(exp1 != 0) / adata.X.shape[0]) + ')')
+        plt.ylabel(gene_j + ' (non-zero counts ' + str(np.sum(exp2 != 0) / adata.X.shape[0]) + ')')
+    else:
+        plt.xlabel(gene_i)
+        plt.ylabel(gene_j)
     
     # Add a title to the plot
-    title_str = '(' + str((exp1 > 0 & exp2 > 0).sum() / adata.X.shape[0]) + ')'
-    plt.title(gene_i + ' vs ' + gene_j + ' (both non-zero counts ' + title_str + ')')
+    if show_nonzero_counts:
+        title_str = '(' + str((exp1 > 0 & exp2 > 0).sum() / adata.X.shape[0]) + ')'
+        plt.title(gene_i + ' vs ' + gene_j + ' (both non-zero counts ' + title_str + ')')
+    else:
+        plt.title(gene_i + ' vs ' + gene_j)
     
     # Add a text label to the plot
-    plt.text(-1., -1., '0-0 ' + str(np.sum((exp1 + exp2) == 0) / adata.X.shape[0]), fontsize=15)
+    if show_nonzero_counts:
+        plt.text(-1., -1., '0-0 ' + str(np.sum((exp1 + exp2) == 0) / adata.X.shape[0]), fontsize=15)
 
     # Return the figure
     return fig
@@ -258,7 +274,9 @@ def heatmap_with_annotations(matrix: np.ndarray, labels: list):
 
 def plot_top_k_joints(data : np.ndarray, matrix : np.ndarray, genes
                         , title : str = ''
-                        , k :int = 9):
+                        , k :int = 9
+                        , count_zeros : bool = False
+                        , aspect_equal : bool = False):
     
     top_k_indices = top_k_off_diagonal_indices_symmetric(matrix, k)
     
@@ -270,7 +288,9 @@ def plot_k_joints(data : np.ndarray
                     , genes : pd.Series
                     , indices : np.ndarray
                     , title : str = ''
-                    , k : int = 9):
+                    , k : int = 9
+                    , count_zeros : bool = False
+                    , aspect_equal : bool = False):
         
     
     l = int(np.sqrt(k))
@@ -283,30 +303,40 @@ def plot_k_joints(data : np.ndarray
         genex, geney = genes.iloc[indices[i, 0]], genes.iloc[indices[i, 1]]
 
 
-        share_both_zeros = np.sum((data[:, indices[i, 0]] == 0) & (data[:, indices[i, 1]] == 0)) / data.shape[0]
-        nb_non_zeros_both = np.sum((data[:, indices[i, 0]] != 0) & (data[:, indices[i, 1]] != 0)) 
-        nb_non_zeros_x = np.sum(data[:, indices[i, 0]] != 0) 
-        nb_non_zeros_y = np.sum(data[:, indices[i, 1]] != 0)
+        sub_title =  'value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]])
+        xlabel, ylabel = genex, geney
         
-        alpha = 0.5
-        if nb_non_zeros_both > 1000:
-            alpha = 0.1
-        if nb_non_zeros_both > 10000:
-            alpha = 0.01
-        
+        alpha = 0.01
+        if count_zeros:
+            share_both_zeros = np.sum((data[:, indices[i, 0]] == 0) & (data[:, indices[i, 1]] == 0)) / data.shape[0]
+            nb_non_zeros_both = np.sum((data[:, indices[i, 0]] != 0) & (data[:, indices[i, 1]] != 0)) 
+            nb_non_zeros_x = np.sum(data[:, indices[i, 0]] != 0) 
+            nb_non_zeros_y = np.sum(data[:, indices[i, 1]] != 0)
+            
+            sub_title =  ' \n share both zeros ' + '{0:.4f}'.format(share_both_zeros) + \
+                ' \n nb both non-zeros ' + str(nb_non_zeros_both) + sub_title
+            xlabel = xlabel + ' - ' + str(nb_non_zeros_x) + ' non-zeros'
+            ylabel = ylabel + ' - ' + str(nb_non_zeros_y) + ' non zeros'
+            
+            alpha = 0.5
+            if nb_non_zeros_both > 1000:
+                alpha = 0.1
+            if nb_non_zeros_both > 10000:
+                alpha = 0.01
+            
+             
         
         ax.plot(data[:, indices[i, 0]]
                 ,data[:, indices[i, 1]], 'o', markersize=2, alpha = alpha,
                 label = genex + ' - ' + geney,
                 color = 'C' + str(i % 10)) 
 
-        ax.set_title('share both zeros ' + '{0:.4f}'.format(share_both_zeros) 
-                        + ' \n  nb both non-zeros ' + str(nb_non_zeros_both) 
-                        + ' \n matrix value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]]))
-        ax.set_xlabel(genex + ' - ' + str(nb_non_zeros_x) + ' non-zeros' )
-        ax.set_ylabel(geney + ' - ' + str(nb_non_zeros_y) + ' non zeros' )
+        ax.set_title(sub_title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         
-        ax.set_aspect('equal')
+        if aspect_equal:
+            ax.set_aspect('equal')
         
     fig.suptitle(title) 
     plt.tight_layout()

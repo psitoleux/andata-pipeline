@@ -36,7 +36,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--pca_n_comps", type=int, help="pca_n_comps", default=50)
     
     parser.add_argument("--batch_corr", type=str, help="batch_corr", default=None)
-    parser.add_argument("--batch_key", type=str, help="batch_key", default="method")
+    parser.add_argument("--batch_key", type=literal_eval, help="batch_key", default="['method', 'file', 'donor']")
+    parser.add_argument("--bbknn_key", type=literal_eval, help="bbknn_key", default="['method', 'donor']")
+    parser.add_argument("--confounder_key", type=literal_eval, help="confouder key", default="[]")
     
     parser.add_argument("--viz", type=str, help="visualization", default="umap")
 

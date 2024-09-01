@@ -1,18 +1,40 @@
-from bbknn import bbknn
+from scanpy.external.pp import bbknn as bbknn_scanpy
 import scanpy as sc
+from bbknn import ridge_regression
 
 
-def bbknn(adata : sc.AnnData, batch_keys : list,n_neighbors : int ) -> sc.AnnData:
+def bbknn(adata : sc.AnnData, batch_keys : list,) -> sc.AnnData:
     
+    adata = bbknn(adata, batch_key=batch_keys,  )
     
     return adata
 
-def bbknn_reg(adata : sc.AnnData, batch_keys : list,n_neighbors : int ) -> sc.AnnData:
+def bbknn_reg(adata : sc.AnnData, batch_key : list, bbknn_key : list , confounder_key : list) -> sc.AnnData:
+    
+    print('running BBKNN reg....')
+    adata.obs['bbknn_key'] = adata.obs[bbknn_key].astype(str).agg('-'.join, axis=1)
+    
+    print('running first BBKNN...')
+    bbknn_scanpy(adata, batch_key = 'bbknn_key', copy=False)
     
     
-    return adata 
+    
+    if confounder_key is None or len(confounder_key) == 0:
+        print('running leiden step...')
+        sc.tl.leiden(adata)  
+        confounder_key = 'leiden'
+        
+        
+    print('running regression step...')
 
+    ridge_regression(adata, batch_key, confounder_key=confounder_key, copy=False)
+    
+    print('running post-regression pca step...')
+    sc.tl.pca(adata)
 
+    print('running second BBKNN')
+
+    return bbknn_scanpy(adata, batch_key='bbknn_key', copy=True)
 
 """
 
