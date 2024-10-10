@@ -21,7 +21,8 @@ def pearson_residuals(adata : sc.AnnData) -> sc.AnnData:
     return adata
     
 
-# TODO GPT-4o generated function, clean it up and understand it !!!!
+
+
 
 def sanity_normalization(
     adata: sc.AnnData,
@@ -95,3 +96,5 @@ def sanity_normalization(
         adata.layers["delta"] = np.loadtxt(delta_file, delimiter='\t', skiprows=1, usecols=range(1, adata.shape[0] + 1)).T
 
     return adata
+    
+

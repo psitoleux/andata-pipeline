@@ -14,25 +14,34 @@ def bbknn_reg(adata : sc.AnnData, batch_key : list, bbknn_key : list , confounde
     print('running BBKNN reg....')
     adata.obs['bbknn_key'] = adata.obs[bbknn_key].astype(str).agg('-'.join, axis=1)
     
+    print('type adata.X:', type(adata.X))
+    
     print('running first BBKNN...')
     bbknn_scanpy(adata, batch_key = 'bbknn_key', copy=False)
     
-    
+    print('type adata.X:', type(adata.X))
+ 
     
     if confounder_key is None or len(confounder_key) == 0:
         print('running leiden step...')
-        sc.tl.leiden(adata)  
+        sc.tl.leiden(adata, flavor="igraph" , n_iterations=2)  
         confounder_key = 'leiden'
         
+    print('type adata.X:', type(adata.X))
+
         
     print('running regression step...')
 
     ridge_regression(adata, batch_key, confounder_key=confounder_key, copy=False)
     
+    print('type adata.X:', type(adata.X))
+
     print('running post-regression pca step...')
     sc.tl.pca(adata)
 
     print('running second BBKNN')
+
+    print('type adata.X:', type(adata.X))
 
     return bbknn_scanpy(adata, batch_key='bbknn_key', copy=True)
 

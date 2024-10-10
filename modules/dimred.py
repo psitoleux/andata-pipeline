@@ -65,6 +65,19 @@ def glmpca_(adata : sc.AnnData, n_comps : int = 50) -> sc.AnnData:
  
     return adata
 
+def hpca(adata : sc.AnnData, n_comps : int = 50) -> sc.AnnData:
+    
+    X = adata[:, adata.var.highly_variable].X
+    
+    X_centered = X - X.mean(axis = 0)
+    
+    cov = X_centered.T @ X_centered
+    
+    w, 
+    
+    
+    
+    
 
 
 def glmpca(adata : sc.AnnData, n_comps : int = 50) -> sc.AnnData:

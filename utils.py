@@ -3,6 +3,11 @@ from scipy.stats import median_abs_deviation as mad
 import scanpy as sc
 import rpy2
 
+from numba import njit
+from tqdm.auto import trange
+from joblib import Parallel, delayed
+import scipy.sparse as sp
+
 
 def is_outlier(adata: sc.AnnData, metric: str, nmads: int) -> np.ndarray:
     """
@@ -59,3 +64,35 @@ def reorder_labels_and_matrix(matrix, labels):
     ordered_labels = [labels[i] for i in ordered_indices]
 
     return ordered_matrix, ordered_labels
+
+
+def shuffle_row(row):
+    if sp.issparse(row):
+        # Convert the sparse row to COO format for easy manipulation
+        row_coo = row.tocoo()
+        
+        # Get non-zero indices and values
+        idx, values = row_coo.col, row_coo.data
+        
+        # Shuffle the values
+        np.random.shuffle(values)
+        
+        # Reconstruct the sparse row
+        shuffled_row = sp.csr_matrix((values, (np.zeros_like(idx), idx)), shape=(1, row.shape[1]))
+        
+        return shuffled_row
+    else:
+        # Handle dense arrays, though not expected in a sparse matrix
+        np.random.shuffle(row)
+        return row
+
+def shuffle_adata(adata: sc.AnnData) -> sc.AnnData:
+    # Parallel processing of rows
+    shuffled_rows = Parallel(n_jobs=-1)(
+        delayed(shuffle_row)(adata.X[i]) for i in trange(adata.X.shape[0])
+    )
+    
+    # Reconstruct the sparse matrix from the shuffled rows
+    adata.X = sp.vstack(shuffled_rows)
+    
+    return adata

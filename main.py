@@ -10,5 +10,5 @@ if __name__ == "__main__":
     #pipeline.directions_analysis()
     #pipeline.directions_analysis('donor')
     #pipeline.grid_direction_analysis(key = 'donor')
-    pipeline.visualize()
+    #pipeline.visualize()
     pipeline.analysis(PCA=True, )

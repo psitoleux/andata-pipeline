@@ -10,8 +10,8 @@ import plotly.io as pio
 
 from plotutils import *
 
-def set_matplotlib_style():
-    plt.style.use("ggplot")
+def set_matplotlib_style(name = "ggplot"):
+    plt.style.use(name)
     
     colors = get_tol()
 
@@ -24,8 +24,9 @@ def get_tol():
               , '#DDCC77', '#CC6677', '#AA4499', '#882255']
 
 def joint_distribution(gene_i: str, gene_j: str
-                       , adata: sc.AnnData, show_nonzero_counts: bool = True
-                       , color = 'k') -> matplotlib.figure.Figure:
+                       , adata: sc.AnnData
+                       , color : str = 'k'
+                       , PCA : bool = False) -> matplotlib.figure.Figure:
     """
     Plot the joint distribution of two genes.
 
@@ -52,33 +53,43 @@ def joint_distribution(gene_i: str, gene_j: str
     fig, ax = plt.subplots(figsize=(4.5, 4.5))
     
     # Extract the expression values of the genes as numpy arrays
-    exp1, exp2 = adata.X[:, gidx1].todense(), adata.X[:, gidx2].todense()
+    if PCA:
+        idx_i = adata.var['highly_variable'][adata.var['highly_variable'] == True].index.get_loc(gene_i)
+        idx_j = adata.var['highly_variable'][adata.var['highly_variable'] == True].index.get_loc(gene_j)
+        
+        PC_projection = adata.varm['PCs'][[idx_i, idx_j], :]
+        
+        recon_expr = adata.obsm['X_pca']@PC_projection.T
+        
+        expr1, expr2 = recon_expr[:, 0], recon_expr[:, 1]
+    else:
+        expr1, expr2 = adata.X[:, gidx1].todense(), adata.X[:, gidx2].todense()
     
-    print('debug.....', exp1.shape, exp2.shape)
     
+    show_nonzero_counts = False
     
-    ax.plot(exp1,exp2, 'o', markersize=2, alpha = 0.01,
+    ax.plot(expr1,expr2, 'o', markersize=2, alpha = 0.01,
                 label = gene_i + ' - ' + gene_j,
                 color = color) 
  
     # Add labels to the x and y axes
     if show_nonzero_counts:
-        plt.xlabel(gene_i + ' (non-zero counts ' + str(np.sum(exp1 != 0) / adata.X.shape[0]) + ')')
-        plt.ylabel(gene_j + ' (non-zero counts ' + str(np.sum(exp2 != 0) / adata.X.shape[0]) + ')')
+        plt.xlabel(gene_i + ' (non-zero counts ' + str(np.sum(expr1 != 0) / adata.X.shape[0]) + ')')
+        plt.ylabel(gene_j + ' (non-zero counts ' + str(np.sum(expr2 != 0) / adata.X.shape[0]) + ')')
     else:
         plt.xlabel(gene_i)
         plt.ylabel(gene_j)
     
     # Add a title to the plot
     if show_nonzero_counts:
-        title_str = '(' + str((exp1 > 0 & exp2 > 0).sum() / adata.X.shape[0]) + ')'
+        title_str = '(' + str((expr1 > 0 & expr2 > 0).sum() / adata.X.shape[0]) + ')'
         plt.title(gene_i + ' vs ' + gene_j + ' (both non-zero counts ' + title_str + ')')
     else:
         plt.title(gene_i + ' vs ' + gene_j)
     
     # Add a text label to the plot
     if show_nonzero_counts:
-        plt.text(-1., -1., '0-0 ' + str(np.sum((exp1 + exp2) == 0) / adata.X.shape[0]), fontsize=15)
+        plt.text(-1., -1., '0-0 ' + str(np.sum((expr1 + expr2) == 0) / adata.X.shape[0]), fontsize=15)
 
     # Return the figure
     return fig
@@ -276,13 +287,56 @@ def plot_top_k_joints(data : np.ndarray, matrix : np.ndarray, genes
                         , title : str = ''
                         , k :int = 9
                         , count_zeros : bool = False
-                        , aspect_equal : bool = False):
+                        , aspect_equal : bool = False
+                        , include_value : bool = False
+                        , matrix_name : str = ''):
     
     top_k_indices = top_k_off_diagonal_indices_symmetric(matrix, k)
     
-    return plot_k_joints(data, matrix, genes, top_k_indices, title, k)
+    return plot_k_joints(data, matrix, genes, top_k_indices, title, k, count_zeros, aspect_equal, include_value)
     
+
+def plot_2_joints(data1 : np.ndarray
+                  , data2 : np.ndarray
+                  , matrix1 : np.ndarray
+                  , matrix2 : np.ndarray
+                  , genes : pd.Series
+                  , idx : np.array
+                  , title : str = ''
+                  , matrix_name1 : str = ''
+                  , matrix_name2 : str = ''
+                  , include_value : bool = True
+                  , color : str = 'C0'):
     
+    fig, ax = plt.subplots(1, 2, figsize=(9, 4))
+    
+    genex, geney = genes.iloc[idx[0]], genes.iloc[idx[1]]
+
+    
+    for i, data, matrix, name,ax in zip(range(2), [data1, data2], [matrix1, matrix2] ,[matrix_name1, matrix_name2], ax.flat):
+        
+        sub_title = name
+        
+        if include_value:
+            sub_title =  '{0:.2f}'.format(matrix[idx[0], idx[1]])
+        xlabel, ylabel = genex, geney
+        
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(sub_title)
+        
+        if i == 0:
+            alpha = 0.2
+        elif i == 1:
+            alpha = 0.01
+        
+        ax.plot(data[:, idx[0]], data[:, idx[1]], '.', color = color, alpha = alpha, markersize = 1)
+    
+    plt.tight_layout()
+    fig.suptitle(title)
+    
+    return fig
+
 def plot_k_joints(data : np.ndarray
                     , matrix : np.ndarray
                     , genes : pd.Series
@@ -290,7 +344,9 @@ def plot_k_joints(data : np.ndarray
                     , title : str = ''
                     , k : int = 9
                     , count_zeros : bool = False
-                    , aspect_equal : bool = False):
+                    , aspect_equal : bool = False
+                    , include_value : bool = False
+                    , matrix_name : str = ''):
         
     
     l = int(np.sqrt(k))
@@ -302,8 +358,9 @@ def plot_k_joints(data : np.ndarray
         
         genex, geney = genes.iloc[indices[i, 0]], genes.iloc[indices[i, 1]]
 
-
-        sub_title =  'value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]])
+        sub_title = matrix_name
+        if include_value:
+            sub_title =  '\n value ' + '{0:.2f}'.format(matrix[indices[i, 0], indices[i, 1]])
         xlabel, ylabel = genex, geney
         
         alpha = 0.01
@@ -351,3 +408,35 @@ def plot_k_random_joints(data : np.ndarray, matrix : np.ndarray, genes, k = 9):
     return plot_k_joints(data, matrix, genes, indices, title = 'random-pairs', k = k)
 
 
+def plot_compare_symmetric_matrices(data1 : np.ndarray
+                                    , data2 : np.ndarray
+                                    , name1 : str
+                                    , name2 : str
+                                    , mtx_kind : str
+                                    , scale = 'linear'
+                                    ):
+    
+    N = data1.shape[1]
+    idx = np.triu_indices(N, 1)
+    
+    
+    fig, ax = plt.subplots(figsize = (9, 9))
+    
+    
+    if scale == 'linear':
+        ax.plot(data1[idx], data2[idx], 'o', alpha = 0.01)
+    elif scale == 'log':
+        pass
+    
+    ax.set_xlabel(name1)
+    ax.set_ylabel(name2)
+    
+    ax.set_title(mtx_kind)
+    
+    return fig
+    
+    
+    
+    
+    
+    

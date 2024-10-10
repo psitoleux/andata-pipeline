@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import scanpy as sc
+from scib.preprocessing import score_cell_cycle
 from parser import get_config
 
 from utils import is_outlier
@@ -11,6 +12,7 @@ from urllib.request import urlretrieve
 import pickle
 
 import matplotlib.pyplot as plt
+import matplotlib
 import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
@@ -80,7 +82,9 @@ class Pipeline():
         print('Making gene names unique...')
         adata.var_names_make_unique()
         
+        
         self.raw = adata.copy()
+        
         self.adata = adata
         self._update_config()
         
@@ -117,10 +121,13 @@ class Pipeline():
         self.outlier_keys = self.config.get("outlier_keys")
         self.do_qc = self.config.get("qc")
         
+        score_cell_cycle(self.adata, organism='human')
+        
         if not self.do_qc:
             print('! Warning: Outliers will not be excluded.')
             
         self.shuffle = self.config.get("shuffle")
+        self.binarise = self.config.get("binarise")
         
         self.obs_mask = self.config.get("obs_mask")
         
@@ -134,7 +141,8 @@ class Pipeline():
                 
         if self.shuffle:
             print("Shuffling data...")
-            np.shuffle(self.adata.X)
+            from utils import shuffle_adata
+            adata = shuffle_adata(self.adata)
                 
         
         # Update ambient method
@@ -383,8 +391,10 @@ class Pipeline():
         self.tag({"mt" : ("MT-", 0), "ribo" : (("RPS","RPL"), 0), "hb" : ("^HB[^(P)]", 1)})
         self.outliers()
         
+        
+        
         print('running normalization, feature selection, dim reduction, and batch correction...')
-
+        
         if self.normalization is not None:
             self.adata = self.normalization(self.adata)
         
@@ -393,12 +403,15 @@ class Pipeline():
             
         if self.doublets is not None and self.do_qc:
             self.adata = self.doublets(self.adata)
-            
+        
         if self.feature_selection is not None:
             self.adata = self.feature_selection(self.adata)
             
             print('feature selection complete')
             
+        if self.binarise:
+            from sklearn.preprocessing import binarize
+            binarize(self.adata.X, threshold=0.0, copy=False)
         
         if self.dim_reduction is not None:
             print('running dim reduction...')
@@ -424,7 +437,7 @@ class Pipeline():
         print('passed')
     
     def visualize(self, n_dim = 2) -> None:
-        from plots import scatter3D, pca3D
+        from plots import scatter3D, pca3D, set_matplotlib_style
         
         if not ('neighbors' in self.adata.uns.keys()) and (self.batch_corr is None):
             sc.pp.neighbors(self.adata, metric = 'cosine')
@@ -441,16 +454,63 @@ class Pipeline():
         
         
         viz_method = self.config.get('viz')
+        set_matplotlib_style("default")
+        
+        
+        donor_to_age = {
+            'F21': '16w',
+            'F22': '9w',
+            'F23': '11w',
+            'F29': '17w',
+            'F30': '14w',
+            'F38': '13w',
+            'F41': '16w',
+            'F45': '12w',
+            'A16': '24y',
+            'P1': '15m',
+            'P2': '13y',
+            'P3': '6m',
+            'F64': '11w',
+            'F67': '12w',
+            'C34': '9w',
+            'T03': '10m',
+            'T06': '30m',
+            'T07': '3m',
+            'F83': '17w',
+            'C40': '7w',
+            'C41': '8w',
+            'A43': '35y',
+            'F74': '10w'
+        }
+        
+        
 
-        for color in ['method', 'donor']:
+        self.adata.obs['age'] = self.adata.obs['donor'].map(donor_to_age)
+        for color in ['method', 'donor', 'n_genes', 'age']:
             
+            
+
             fig_pca = sc.pl.pca(self.adata, color = color, annotate_var_explained = True, return_fig = True) # plot 2D pca 
             self.save_mpl(fig_pca, title = 'pca-batch-' + color)
             
             
             fig = sc.pl.umap(self.adata, color = color, return_fig = True, show = False) # plot 2D umap
             self.save_mpl(fig, title = 'umap-batch-' + color)
-        
+            
+                
+            
+            
+
+            
+        if 'leiden' in self.adata.obs.columns:
+            
+            fig = sc.pl.umap(self.adata, color = 'leiden', return_fig = True, show = False) # plot 2D umap
+            self.save_mpl(fig, title = 'umap-leiden')
+            
+            fig = sc.pl.pca(self.adata, color = 'leiden', return_fig = True, show = False) # plot 2D pca
+            self.save_mpl(fig, title = 'pca-leiden')
+            
+         
         for gene in self._get_pbmc_marker_genes():
             fig_pca_marker = sc.pl.pca(self.adata, color = gene, show = False, return_fig = True)
             self.save_mpl(fig_pca_marker, title = gene + '-marker-pca')
@@ -458,6 +518,7 @@ class Pipeline():
             fig_marker = sc.pl.umap(self.adata, color = gene, show = False, return_fig = True)
             self.save_mpl(fig_marker, title = gene + '-marker-umap')
         
+        set_matplotlib_style("ggplot")
         
         if False:
             
@@ -494,6 +555,97 @@ class Pipeline():
 
         return None
     
+    
+    def _plot_variance_ratio(self):
+        print('Plotting variance ratio...')
+        var_ratio = self.adata.uns['pca']['variance_ratio']
+        n_comps = len(var_ratio)
+
+        fig, ax = plt.subplots(figsize=(16, 9))
+        twin = ax.twinx()
+
+        ax.plot(range(1, n_comps + 1), var_ratio, 'o-', label='Variance Ratio', color='C2')
+        twin.plot(range(1, n_comps + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio', color='C5')
+
+        ax.set_ylabel('Variance Ratio')
+        twin.set_ylabel('Cumulative Variance Ratio')
+        ax.set_xlabel('Number of Components')
+        
+        ax.yaxis.label.set_color('C2')
+        twin.yaxis.label.set_color('C5')
+        
+        ax.tick_params(axis='y', colors=left_plot[0].get_color())
+        twin.tick_params(axis='y', colors=right_plot[0].get_color())
+        
+        ax.spines["right"].set_edgecolor(right_plot[0].get_color())
+        
+        ax.grid(color = left_plot[0].get_color(), alpha = 0.2)
+        twin.grid(color = right_plot[0].get_color(), alpha = 0.2)
+
+        self.save_mpl(fig, title='variance_ratio')
+        
+    def _get_matrices_pairwise(self, A):
+        
+        print('computing correlations...')
+        correlations = np.corrcoef(A, rowvar=False)
+
+        print('computing covariances...')
+        covariances = np.cov(A, rowvar=False)
+
+        # Setting regularization parameter
+        alpha = self.adata.uns['pca']['variance'][-1] 
+        print('inverting covariance to get coupling...')
+        coupling_matrix = np.linalg.pinv(covariances )
+                                        #+ alpha * np.eye(covariances.shape[0]), )
+
+
+        return correlations, covariances, coupling_matrix
+    
+    def _get_gene_indices(self, genes, cycle_genes, marker_genes):
+        if genes == 'highly_variable':
+            genes_idx = self.adata.var['highly_variable'] != (
+                self.adata.var['highly_variable'] & self.adata.var['GeneName'].isin(cycle_genes))
+        elif genes == 'marker':
+            genes_idx = self.adata.var['GeneName'].isin(marker_genes)
+        else:
+            genes_idx = list(set(self.adata.var['GeneName']) - set(cycle_genes))
+        relevant_genes = self.adata.var['GeneName'][genes_idx]
+        return genes_idx, relevant_genes
+    
+    def _get_pca_representation(self, genes_idx):
+        
+        A_pca = self.adata.obsm['X_pca']@self.adata.varm['PCs'].T 
+        A_pca = A_pca[:, genes_idx]
+        
+        return A_pca
+
+    def _compare_correlations(self, A, A_pca, genes_idx):
+        
+        correlations, covariances, coupling_matrix = self._get_matrices_pairwise(A)
+        corr_pca, cov_pca, coupling_pca = self._get_matrices_pairwise(A_pca)
+        
+        from sklearn.preprocessing import binarize
+        
+        binarize(self.adata.X, threshold=0.0, copy=False)
+        sc.tl.pca(self.adata, )
+        
+        A_pca_binary = self._get_pca_representation(genes_idx)
+        
+        corr_pca_binary, cov_pca_binary, coupling_pca_binary = self._get_matrices_pairwise(A_pca_binary)
+        
+        
+        
+        from plots import plot_compare_symmetric_matrices
+        
+        
+        fig = plot_compare_symmetric_matrices(coupling_pca, coupling_pca_binary, 'coupling pca', 'coupling pca binary', '')
+        
+        self.save_mpl(fig, title='compare_couplings')
+        
+        
+        
+        
+
     def analysis(self, PCA: bool = False
                  , plot_matrices = False
                  , genes : str = 'highly_variable'
@@ -508,100 +660,21 @@ class Pipeline():
         
         cycle_genes = self._get_cycle_genes()
         marker_genes = self._get_pbmc_marker_genes()
+        marker_genes = []
         
-        i = 0
-        if True:
-            
-            list_hvg_idx = self.adata.var['highly_variable'] & self.adata.var['GeneName'].isin(marker_genes) 
-            
-            print('number:', len(list_hvg_idx))
-            
-            print(self.adata.var['GeneName'][list_hvg_idx])
-        
-        if genes == 'highly_variable':
-            if 'highly_variable' in self.adata.var.columns:
-                genes_idx = (self.adata.var['highly_variable'] != (self.adata.var['highly_variable'] 
-                                                                & self.adata.var['GeneName'].isin(cycle_genes))) 
-        elif genes == 'marker':
-            genes_idx = self.adata.var['GeneName'].isin(marker_genes)
-        else:
-            high_var_no_cycle_idx = list(set(self.adata.var['GeneName']) - set(cycle_genes))
-            
-        relevant_genes = self.adata.var['GeneName'][genes_idx]
-        
+        genes_idx, relevant_genes = self._get_gene_indices(genes, cycle_genes, marker_genes)
         
         print('getting dense array...')
-        if PCA:
-            A = self.adata.obsm['X_pca']@self.adata.varm['PCs'].T 
-            A = A[:, genes_idx]
-        else:
-            A = self.adata[:, genes_idx].X.toarray()
         
-        print('computing correlations...')
-        correlations = np.corrcoef(A, rowvar=False)
-        print('computing covariances...')
-        covariances = np.cov(A, rowvar=False)
-
-        # Setting regularization parameter
-        alpha = self.adata.uns['pca']['variance'][-1] 
-        print('inverting covariance to get coupling...')
-        coupling_matrix = np.linalg.pinv(covariances )
-                                        #+ alpha * np.eye(covariances.shape[0]), )
+        A_pca = self._get_pca_representation(genes_idx)
         
-        if plot_matrices: 
-            from utils import reorder_labels_and_matrix
-            from plots import heatmap_with_annotations  
-            corr_ordered, labels_corr  = reorder_labels_and_matrix(correlations, relevant_genes)
-            
-            fig = heatmap_with_annotations(corr_ordered, labels_corr)
-            
-            self.save_plotly(fig, 'correlation_matrix')
-            
-            log1p = lambda x: np.sign(x) * np.log(1+np.abs(x))
-
-            coupling_ordered, labels_coupling = reorder_labels_and_matrix(log1p(coupling_matrix), relevant_genes )
-            
-            self.save_plotly(fig, 'coupling_matrix')
-            
-            fig = heatmap_with_annotations((coupling_ordered), labels_coupling)
-            
-            covariances_ordered, labels_cov = reorder_labels_and_matrix(covariances, relevant_genes)
-            
-            fig = heatmap_with_annotations(log1p(covariances_ordered), labels_cov)
-            
-            self.save_plotly(fig, 'covariance_matrix')
-        
-        print('plotting variance ratio...')
-        fig, ax = plt.subplots(figsize=(16, 9))
-        
-        twin = ax.twinx()
-        
-        var_ratio = self.adata.uns['pca']['variance_ratio']
-        n_coms = len(var_ratio)
-        left_plot = ax.plot(range(1, n_coms + 1), var_ratio, 'o-', label='Variance Ratio', color = 'C2')
-        
-        right_plot = twin.plot(range(1, n_coms + 1), np.cumsum(var_ratio), 'o-', label='Cumulative Variance Ratio', color = 'C5')
-        
-        ax.set_ylabel('Variance Ratio')
-        twin.set_ylabel('Cumulative Variance Ratio')
-        
-        ax.set_xlabel('Number of Components')
-        
-        ax.yaxis.label.set_color(left_plot[0].get_color())
-        twin.yaxis.label.set_color(right_plot[0].get_color())
-        
-        ax.tick_params(axis='y', colors=left_plot[0].get_color())
-        twin.tick_params(axis='y', colors=right_plot[0].get_color())
-        
-        ax.spines["right"].set_edgecolor(right_plot[0].get_color())
-        
-        ax.grid(color = left_plot[0].get_color(), alpha = 0.2)
-        twin.grid(color = right_plot[0].get_color(), alpha = 0.2)
-        
-        self.save_mpl(fig, title = 'variance_ratio')
+        correlations, covariances, coupling_matrix = self._get_matrices_pairwise(A_pca)
         
         from plots import plot_top_k_joints
         print('plotting joints...')
+        
+        
+        self._compare_correlations(self.adata.X[:, genes_idx], A_pca, genes_idx)
         
         count_non_zeros = not PCA
         aspect_equal = not PCA 
@@ -611,6 +684,8 @@ class Pipeline():
             'aspect_equal' : aspect_equal,
             'genes' : relevant_genes 
         }
+
+        """
 
         self.save_mpl(
             plot_top_k_joints(A, coupling_matrix, relevant_genes, title='coupling-matrix', count_zeros = count_non_zeros, aspect_equal = aspect_equal)
@@ -628,7 +703,6 @@ class Pipeline():
             plot_top_k_joints(A, -correlations, relevant_genes, title = 'negative-correlations', count_zeros = count_non_zeros, aspect_equal = aspect_equal)
         )
         
-        """
         self.save_mpl(
             plot_top_k_joints(A, covariances, relevant_genes, title = 'covariances',    count_zeros = count_non_zeros, aspect_equal = aspect_equal)
         )
@@ -643,16 +717,83 @@ class Pipeline():
             plot_k_random_joints(A, coupling_matrix, relevant_genes)
         )
         """
-        from plots import joint_distribution
         
+        """
+        
+        PCA = True
+        from plots import joint_distribution, plot_2_joints
+        #marker_genes += ['C1QA', 'CQ1B', 'CQ1C']
+        color_idx = 0
         for i in range(len(marker_genes)):
             for j in range(i+1, len(marker_genes)):
                 
                 self.save_mpl(
-                    joint_distribution( marker_genes[i], marker_genes[j], adata=self.adata,show_nonzero_counts= not PCA),
+                    joint_distribution( marker_genes[i], marker_genes[j]
+                                    , adata=self.adata
+                                    , color = 'C' + str(color_idx % 10)
+                                    , PCA=PCA),
                     title = 'joint-distribution' + marker_genes[i] + '-' + marker_genes[j], 
                 )
+                color_idx += 1
+                
+        compare_correlation_values = True
         
+        
+        
+        
+        
+        if compare_correlation_values:                
+            from plotutils import top_k_off_diagonal_indices_symmetric
+            
+            idx_correlations_plus = np.array(top_k_off_diagonal_indices_symmetric(correlations_pca-correlations, k = 10))
+            idx_correlations_minus = np.array(top_k_off_diagonal_indices_symmetric(correlations-correlations_pca, k = 10))
+            #idx_cov = top_k_off_diagonal_indices_symmetric(covariances, k = 10)
+            
+            idx_cov_plus = np.array(top_k_off_diagonal_indices_symmetric(covariances_pca-covariances, k = 10))
+            idx_cov_minus = np.array(top_k_off_diagonal_indices_symmetric(covariances-covariances_pca, k = 10))
+            
+            for i in range(len(idx_correlations_plus)):
+                
+                if i +1 == 1:
+                    numbering = 'st'
+                elif i +1 == 2:
+                    numbering = 'nd'
+                elif i +1 == 3:
+                    numbering = 'rd'
+                else:
+                    numbering = 'th'
+
+                self.save_mpl(
+                    plot_2_joints(A, A_pca, matrix1=correlations, matrix2=correlations_pca, genes=relevant_genes
+                                    , idx = idx_correlations_plus[i], color = 'C' + str(i % 10)
+                                , matrix_name1='raw corr', matrix_name2='pca corr'
+                                , include_value = True, title = str(i+1)+  numbering +'-correlations-increase'),
+                )
+                self.save_mpl(
+                    plot_2_joints(A, A_pca, correlations, correlations_pca, relevant_genes, idx_correlations_minus[i], color = 'C' + str(i % 10),
+                                matrix_name1='raw corr', matrix_name2='pca corr', title=str(i+1)+ numbering +'-correlation-decrease',)
+                )
+                
+                self.save_mpl(
+                    plot_2_joints(A, A_pca, matrix1=covariances, matrix2=covariances_pca, genes=relevant_genes, idx=idx_cov_plus[i], color = 'C' + str(i % 10),
+                                matrix_name1='raw cov', matrix_name2='pca cov', title=str(i+1)+ numbering +'-covariances-increase',)
+                )
+                self.save_mpl(
+                    plot_2_joints(A, A_pca, covariances, covariances_pca, relevant_genes, idx_cov_minus[i], color = 'C' + str(i % 10),
+                                matrix_name1='raw cov', matrix_name2='pca cov', title=str(i+1)+ numbering +'-covariances-decrease',)
+                )
+                
+                
+                
+
+        """
+            
+            
+
+                
+                
+                
+            
         return None
     
     def grid_direction_analysis(self, key = 'donor'):
@@ -682,6 +823,9 @@ class Pipeline():
         if adata is None:
             adata = self.adata
         
+        
+            
+        
         set_matplotlib_style()
         
         if v == 'donor' or v == 'method':
@@ -690,8 +834,22 @@ class Pipeline():
             direction_of_interest = adata.obs[v]
         
         axis, pearson, spearman = correlations_along_vector(adata, direction_of_interest)
+        
+        raw = True
+        
+        if raw:
+            raw = self.raw 
+            sc.pp.log1p(raw)
+            
+            sc.pp.highly_variable_genes(raw, n_top_genes = self.config.get('n_top_genes', 2000))
+            sc.pp.pca(raw)
+            
+            axis_raw, pearson_raw, spearman_raw = correlations_along_vector(raw, raw.obs[v])
+            
+            
+            
 
-        fig, ax = plt.subplots(figsize=(16, 9))
+        fig, ax = plt.subplots(figsize=(16, 7))
         
         pearson_corr, pearson_pval = pearson
         
@@ -699,17 +857,23 @@ class Pipeline():
         
         twin = ax.twinx()
         
-        col_left = (235 / 255, 106 / 255, 96/ 255)
-        col_right = (0 / 255, 79 / 255, 115 / 255)
+        col_left = 'C2'
+        col_right = 'C5'
         
-        left_plot = ax.plot(range(k), np.abs(pearson_corr), 'o-', label = 'pearson', color = col_left)
-        right_plot = twin.plot(range(k), np.sqrt(np.cumsum(pearson_corr**2)), 'o-', color = col_right)
+        if raw:
+            ax.plot(range(1,k+1), np.abs(pearson_raw[0]), 'd:', label = 'pearson (unnormalized)', color = col_left)
+            twin.plot(range(1, k+1), np.sqrt(np.cumsum(pearson_raw[0]**2)), 'd:', color = col_right)
         
+
+        left_plot = ax.plot(range(1,k+1), np.abs(pearson_corr), 'o-', label = 'pearson', color = col_left)
+        right_plot = twin.plot(range(1,k+1), np.sqrt(np.cumsum(pearson_corr**2)), 'o-', color = col_right)
+        
+        matplotlib.rcParams.update({'font.size': 22})
         ax.set_ylabel('correlation')
         twin.set_ylabel('cumulative correlation')
         
-        ax.set_xlabel('k')
-        ax.legend(facecolor = 'w')
+        ax.set_xlabel('k-th PC')
+        ax.legend(facecolor = 'w', loc = 'center right')
         
         ax.yaxis.label.set_color(left_plot[0].get_color())
         twin.yaxis.label.set_color(right_plot[0].get_color())
@@ -720,7 +884,12 @@ class Pipeline():
         twin.grid(color = col_right, alpha = 0.2)
         
         
-        plt.legend(facecolor='white')
+        set_matplotlib_style()
+        
+        
+         
+        
+        ax.legend(facecolor='white')
         
         self.save_mpl(fig, title = v + '-directions')
         
@@ -752,7 +921,8 @@ class Pipeline():
                     ,format = format
                     , dpi = 600
                     )
-        del fig
+        plt.close(fig)
+        #del fig
         
         
     def save_plotly(self, fig : go.Figure, name : str) -> None:

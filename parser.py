@@ -19,6 +19,8 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--qc", action=argparse.BooleanOptionalAction)
     
     parser.add_argument("--shuffle", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--binarise", action=argparse.BooleanOptionalAction)
+    
     parser.add_argument("--obs_mask", type=literal_eval, help = "dict observations to keep", default="{ }")
      
     parser.add_argument("--normalization", type=str, help="normalization", default="log1p")
@@ -36,13 +38,12 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--pca_n_comps", type=int, help="pca_n_comps", default=50)
     
     parser.add_argument("--batch_corr", type=str, help="batch_corr", default=None)
-    parser.add_argument("--batch_key", type=literal_eval, help="batch_key", default="['method', 'file', 'donor']")
+    parser.add_argument("--batch_key", type=literal_eval, help="batch_key", default="['method', 'file', 'donor', 'S_score', 'G2M_score']")
     parser.add_argument("--bbknn_key", type=literal_eval, help="bbknn_key", default="['method', 'donor']")
     parser.add_argument("--confounder_key", type=literal_eval, help="confouder key", default="[]")
     
     parser.add_argument("--viz", type=str, help="visualization", default="umap")
 
-    
     return parser
 
 def parse_args() -> Namespace:
